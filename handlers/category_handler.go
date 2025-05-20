@@ -4,12 +4,28 @@ package handlers
 import (
 	"encoding/json"
 	"inventory-go/models"
+	"inventory-go/repositories"
 
 	"net/http"
 	"strings"
 
 	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v5"
 )
+
+// CategoryHandler handles category-related operations
+type CategoryHandler struct {
+	*BaseHandler
+	repo repositories.CategoryRepository
+}
+
+// NewCategoryHandler creates a new CategoryHandler
+func NewCategoryHandler(db *pgx.Conn) *CategoryHandler {
+	return &CategoryHandler{
+		BaseHandler: &BaseHandler{DB: db},
+		repo:        repositories.NewCategoryRepository(db),
+	}
+}
 
 // GetAll returns all categories
 func (h *CategoryHandler) GetAllCategories(w http.ResponseWriter, r *http.Request) {

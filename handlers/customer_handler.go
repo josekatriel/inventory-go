@@ -3,11 +3,27 @@ package handlers
 import (
 	"encoding/json"
 	"inventory-go/models"
+	"inventory-go/repositories"
 	"net/http"
 	"strconv"
 
 	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v5"
 )
+
+// CustomerHandler handles customer-related operations
+type CustomerHandler struct {
+	*BaseHandler
+	repo repositories.CustomerRepository
+}
+
+// NewCustomerHandler creates a new CustomerHandler
+func NewCustomerHandler(db *pgx.Conn) *CustomerHandler {
+	return &CustomerHandler{
+		BaseHandler: &BaseHandler{DB: db},
+		repo:        repositories.NewCustomerRepository(db),
+	}
+}
 
 func (h *CustomerHandler) GetAllCustomers(w http.ResponseWriter, r *http.Request) {
 	customers, err := h.repo.GetAll()

@@ -4,31 +4,29 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 // Customer model
 type Customer struct {
-	ID          string    `gorm:"type:char(36);primaryKey" json:"id"`
-	Name        string    `gorm:"not null" json:"name"`
-	Email       string    `gorm:"uniqueIndex" json:"email,omitempty"`
-	Phone       string    `json:"phone,omitempty"`
-	Address     string    `gorm:"type:text" json:"address,omitempty"`
-	TotalOrders int       `gorm:"default:0" json:"total_orders"`
-	TotalSpent  float64   `gorm:"default:0" json:"total_spent"`
-	LastOrderAt time.Time `json:"last_order_at,omitempty"`
-	Notes       string    `gorm:"type:text" json:"notes,omitempty"`
+	ID          string    `json:"id" db:"id"`
+	Name        string    `json:"name" db:"name"`
+	Email       string    `json:"email,omitempty" db:"email"`
+	Phone       string    `json:"phone,omitempty" db:"phone"`
+	Address     string    `json:"address,omitempty" db:"address"`
+	TotalOrders int       `json:"total_orders" db:"total_orders"`
+	TotalSpent  float64   `json:"total_spent" db:"total_spent"`
+	LastOrderAt time.Time `json:"last_order_at,omitempty" db:"last_order_at"`
+	Notes       string    `json:"notes,omitempty" db:"notes"`
 
 	// Timestamps
-	CreatedAt time.Time      `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt time.Time      `json:"updated_at" gorm:"autoUpdateTime"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
+	DeletedAt *time.Time `json:"-" db:"deleted_at"`
 }
 
-// BeforeCreate hook for Customer
-func (c *Customer) BeforeCreate(tx *gorm.DB) error {
+// GenerateID sets a UUID if ID is empty
+func (c *Customer) GenerateID() {
 	if c.ID == "" {
 		c.ID = uuid.NewString()
 	}
-	return nil
 }

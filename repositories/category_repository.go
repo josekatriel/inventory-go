@@ -72,7 +72,7 @@ func (r *CategoryRepositoryImpl) GetAll() ([]models.Category, error) {
 func (r *CategoryRepositoryImpl) GetByID(id string) (*models.Category, error) {
 	var category models.Category
 	var deletedAt *time.Time
-	
+
 	query := `SELECT id, name, slug, description, parent_id, image_url, status, sort_order, 
 	          created_at, updated_at, deleted_at 
 	          FROM categories 
@@ -98,7 +98,7 @@ func (r *CategoryRepositoryImpl) GetByID(id string) (*models.Category, error) {
 func (r *CategoryRepositoryImpl) GetBySlug(slug string) (*models.Category, error) {
 	var category models.Category
 	var deletedAt *time.Time
-	
+
 	query := `SELECT id, name, slug, description, parent_id, image_url, status, sort_order, 
 	          created_at, updated_at, deleted_at 
 	          FROM categories 
@@ -167,14 +167,28 @@ func (r *CategoryRepositoryImpl) GetByParentID(parentID *string) ([]models.Categ
 
 // Create creates a new category
 func (r *CategoryRepositoryImpl) Create(category *models.Category) error {
+	// Generate UUID if not provided
 	if category.ID == "" {
 		category.ID = uuid.New().String()
 	}
-	
+
+	// Generate slug from name if not provided
+	category.GenerateSlug()
+
+	// Check if slug already exists
+	existing, err := r.GetBySlug(category.Slug)
+	if err != nil {
+		return fmt.Errorf("error checking for duplicate slug: %w", err)
+	}
+	if existing != nil {
+		// Append a unique identifier to make the slug unique
+		category.Slug = fmt.Sprintf("%s-%s", category.Slug, category.ID[:8])
+	}
+
 	now := time.Now().UTC()
 	category.CreatedAt = now
 	category.UpdatedAt = now
-	
+
 	query := `INSERT INTO categories (id, name, slug, description, parent_id, image_url, status, sort_order, created_at, updated_at)
 	          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	          RETURNING id, created_at, updated_at`
@@ -190,6 +204,30 @@ func (r *CategoryRepositoryImpl) Create(category *models.Category) error {
 func (r *CategoryRepositoryImpl) Update(category *models.Category) error {
 	category.UpdatedAt = time.Now().UTC()
 	
+	// Get existing category to check if name changed
+	existing, err := r.GetByID(category.ID)
+	if err != nil {
+		return fmt.Errorf("error retrieving existing category: %w", err)
+	}
+	if existing == nil {
+		return fmt.Errorf("category not found")
+	}
+	
+	// Only regenerate slug if name changed or slug is empty
+	if existing.Name != category.Name || category.Slug == "" {
+		category.GenerateSlug()
+		
+		// Check if new slug already exists (excluding this category)
+		duplicate, err := r.GetBySlug(category.Slug)
+		if err != nil {
+			return fmt.Errorf("error checking for duplicate slug: %w", err)
+		}
+		if duplicate != nil && duplicate.ID != category.ID {
+			// Append a unique identifier to make the slug unique
+			category.Slug = fmt.Sprintf("%s-%s", category.Slug, category.ID[:8])
+		}
+	}
+
 	query := `UPDATE categories 
 	          SET name = $1, slug = $2, description = $3, parent_id = $4, 
 	              image_url = $5, status = $6, sort_order = $7, updated_at = $8
@@ -238,10 +276,8 @@ func (r *CategoryRepositoryImpl) GetWithChildren(id string) (*models.Category, e
 		return nil, err
 	}
 
-	// Convert to slice of pointers for the Children field
-	for i := range children {
-		category.Children = append(category.Children, children[i])
-	}
+	// Append all children at once using the spread operator
+	category.Children = append(category.Children, children...)
 
 	return &category, nil
 }

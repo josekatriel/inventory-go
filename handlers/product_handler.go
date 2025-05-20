@@ -5,13 +5,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"inventory-go/models"
+	"inventory-go/repositories"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
-	"gorm.io/gorm"
+	"github.com/jackc/pgx/v5"
 )
+
+// ProductHandler handles product-related operations
+type ProductHandler struct {
+	*BaseHandler
+	prodRepo repositories.ProductRepository
+}
+
+// NewProductHandler creates a new ProductHandler
+func NewProductHandler(db *pgx.Conn) *ProductHandler {
+	return &ProductHandler{
+		BaseHandler: &BaseHandler{DB: db},
+		prodRepo:    repositories.NewProductRepository(db),
+	}
+}
 
 // parseIDFromRequest parses an ID from the URL parameters
 func (h *ProductHandler) parseIDFromRequest(r *http.Request, paramName string) (string, bool) {
@@ -66,9 +81,10 @@ func (h *ProductHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get product by ID
 	product, err := h.prodRepo.GetByID(id)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == pgx.ErrNoRows {
 			respondWithError(w, http.StatusNotFound, "Product not found")
 		} else {
 			respondWithError(w, http.StatusInternalServerError, err.Error())
@@ -86,7 +102,7 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	// Get existing product
 	existing, err := h.prodRepo.GetByID(id)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == pgx.ErrNoRows {
 			respondWithError(w, http.StatusNotFound, "Product not found")
 			return
 		}
@@ -126,7 +142,7 @@ func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 
 	// Check if product exists
 	if _, err := h.prodRepo.GetByID(id); err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == pgx.ErrNoRows {
 			respondWithError(w, http.StatusNotFound, "Product not found")
 			return
 		}

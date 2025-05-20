@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 // SalesSummary represents a summary of sales data
@@ -48,65 +47,65 @@ const (
 )
 
 type Sale struct {
-	ID          string     `gorm:"type:char(36);primaryKey" json:"id"`
-	ReferenceNo string     `gorm:"index" json:"reference_no"`
-	Status      SaleStatus `gorm:"type:varchar(20);default:'draft'" json:"status"`
-	SaleDate    time.Time  `json:"sale_date"`
-	Note        string     `gorm:"type:text" json:"note,omitempty"`
-	Total       float64    `gorm:"not null" json:"total"`
-	Paid        float64    `gorm:"default:0" json:"paid"`
-	Balance     float64    `gorm:"default:0" json:"balance"`
+	ID          string     `json:"id" db:"id"`
+	ReferenceNo string     `json:"reference_no" db:"reference_no"`
+	Status      SaleStatus `json:"status" db:"status"`
+	SaleDate    time.Time  `json:"sale_date" db:"sale_date"`
+	Note        string     `json:"note,omitempty" db:"note"`
+	Total       float64    `json:"total" db:"total"`
+	Paid        float64    `json:"paid" db:"paid"`
+	Balance     float64    `json:"balance" db:"balance"`
 
 	// Relations
-	CustomerID *string       `gorm:"type:char(36);index" json:"customer_id,omitempty"`
-	Customer   *Customer     `json:"customer,omitempty" gorm:"foreignKey:CustomerID"`
-	Items      []SaleItem    `json:"items" gorm:"foreignKey:SaleID"`
-	Payments   []SalePayment `json:"payments,omitempty" gorm:"foreignKey:SaleID"`
-	Platform   PlatformType  `gorm:"type:varchar(50);not null;uniqueIndex" json:"platform"`
+	CustomerID *string       `json:"customer_id,omitempty" db:"customer_id"`
+	Customer   *Customer     `json:"customer,omitempty" db:"-"`
+	Items      []SaleItem    `json:"items" db:"-"`
+	Payments   []SalePayment `json:"payments,omitempty" db:"-"`
+	Platform   PlatformType  `json:"platform" db:"platform"`
 
 	// Timestamps
-	CreatedAt time.Time      `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt time.Time      `json:"updated_at" gorm:"autoUpdateTime"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
+	DeletedAt *time.Time `json:"-" db:"deleted_at"`
 }
 
 type SaleItem struct {
-	ID          string  `gorm:"type:char(36);primaryKey" json:"id"`
-	SaleID      string  `gorm:"type:char(36);index" json:"sale_id"`
-	ProductID   string  `gorm:"type:char(36);index" json:"product_id"`
-	ProductName string  `json:"product_name"`
-	Quantity    int     `gorm:"not null;check:quantity > 0"`
-	UnitPrice   float64 `gorm:"not null;check:unit_price >= 0"`
-	Tax         float64 `gorm:"default:0" json:"tax"`
-	Discount    float64 `gorm:"default:0" json:"discount"`
-	Subtotal    float64 `json:"subtotal"`
+	ID          string  `json:"id" db:"id"`
+	SaleID      string  `json:"sale_id" db:"sale_id"`
+	ProductID   string  `json:"product_id" db:"product_id"`
+	ProductName string  `json:"product_name" db:"product_name"`
+	Quantity    int     `json:"quantity" db:"quantity"`
+	UnitPrice   float64 `json:"unit_price" db:"unit_price"`
+	Tax         float64 `json:"tax" db:"tax"`
+	Discount    float64 `json:"discount" db:"discount"`
+	Subtotal    float64 `json:"subtotal" db:"subtotal"`
 
 	// Relations
-	Product *Product `json:"product,omitempty" gorm:"foreignKey:ProductID"`
+	Product *Product `json:"product,omitempty" db:"-"`
 
 	// Timestamps
-	CreatedAt time.Time      `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt time.Time      `json:"updated_at" gorm:"autoUpdateTime"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
+	DeletedAt *time.Time `json:"-" db:"deleted_at"`
 }
 
 type SalePayment struct {
-	ID            string    `gorm:"type:char(36);primaryKey" json:"id"`
-	SaleID        string    `gorm:"type:char(36);index" json:"sale_id"`
-	Amount        float64   `json:"amount"`
-	PaymentMethod string    `json:"payment_method"` // e.g., "cash", "credit_card", "bank_transfer"
-	Reference     string    `json:"reference,omitempty"`
-	Note          string    `json:"note,omitempty"`
-	PaymentDate   time.Time `json:"payment_date"`
+	ID            string    `json:"id" db:"id"`
+	SaleID        string    `json:"sale_id" db:"sale_id"`
+	Amount        float64   `json:"amount" db:"amount"`
+	PaymentMethod string    `json:"payment_method" db:"payment_method"` // e.g., "cash", "credit_card", "bank_transfer"
+	Reference     string    `json:"reference,omitempty" db:"reference"`
+	Note          string    `json:"note,omitempty" db:"note"`
+	PaymentDate   time.Time `json:"payment_date" db:"payment_date"`
 
 	// Timestamps
-	CreatedAt time.Time      `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt time.Time      `json:"updated_at" gorm:"autoUpdateTime"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
+	DeletedAt *time.Time `json:"-" db:"deleted_at"`
 }
 
-// BeforeCreate hook for Sale
-func (s *Sale) BeforeCreate(tx *gorm.DB) error {
+// GenerateID sets a UUID if ID is empty and ensures reference number exists
+func (s *Sale) GenerateID() {
 	if s.ID == "" {
 		s.ID = uuid.NewString()
 	}
@@ -116,7 +115,10 @@ func (s *Sale) BeforeCreate(tx *gorm.DB) error {
 	if s.SaleDate.IsZero() {
 		s.SaleDate = time.Now()
 	}
+}
 
+// PrepareSave sets the SaleID for all items and payments and calculates totals
+func (s *Sale) PrepareSave() {
 	// Set SaleID for all items
 	for i := range s.Items {
 		s.Items[i].SaleID = s.ID
@@ -128,25 +130,24 @@ func (s *Sale) BeforeCreate(tx *gorm.DB) error {
 	}
 
 	s.CalculateTotals()
-	return nil
 }
 
-func (i *SaleItem) BeforeCreate(tx *gorm.DB) error {
+// GenerateID sets a UUID if ID is empty
+func (i *SaleItem) GenerateID() {
 	if i.ID == "" {
 		i.ID = uuid.NewString()
 	}
 	i.CalculateSubtotal()
-	return nil
 }
 
-func (s *SalePayment) BeforeCreate(tx *gorm.DB) error {
+// GenerateID sets a UUID if ID is empty
+func (s *SalePayment) GenerateID() {
 	if s.ID == "" {
 		s.ID = uuid.NewString()
 	}
 	if s.PaymentDate.IsZero() {
 		s.PaymentDate = time.Now()
 	}
-	return nil
 }
 
 // Calculate methods

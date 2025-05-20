@@ -4,13 +4,32 @@ import (
 	"encoding/json"
 	"errors"
 	"inventory-go/models"
+	"inventory-go/repositories"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
-	"gorm.io/gorm"
+	"github.com/jackc/pgx/v5"
 )
+
+// SaleHandler handles sale-related operations
+type SaleHandler struct {
+	*BaseHandler
+	saleRepo     repositories.SaleRepository
+	customerRepo repositories.CustomerRepository
+	prodRepo     repositories.ProductRepository
+}
+
+// NewSaleHandler creates a new SaleHandler
+func NewSaleHandler(db *pgx.Conn) *SaleHandler {
+	return &SaleHandler{
+		BaseHandler:  &BaseHandler{DB: db},
+		saleRepo:     repositories.NewSaleRepository(db),
+		customerRepo: repositories.NewCustomerRepository(db),
+		prodRepo:     repositories.NewProductRepository(db),
+	}
+}
 
 func (h *SaleHandler) GetSales(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
@@ -148,12 +167,11 @@ func (h *SaleHandler) UpdateSale(w http.ResponseWriter, r *http.Request) {
 	// Get existing sale
 	existing, err := h.saleRepo.GetByID(id)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			respondWithError(w, http.StatusNotFound, "Sale not found")
+			return
+		}
 		respondWithError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if existing == nil {
-		respondWithError(w, http.StatusNotFound, "Sale not found")
 		return
 	}
 
@@ -216,7 +234,7 @@ func (h *SaleHandler) DeleteSale(w http.ResponseWriter, r *http.Request) {
 
 	// Check if sale exists
 	if _, err := h.saleRepo.GetByID(id); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			respondWithError(w, http.StatusNotFound, "Sale not found")
 			return
 		}
