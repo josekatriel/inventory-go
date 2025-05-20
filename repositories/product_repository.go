@@ -40,6 +40,7 @@ type ProductRepository interface {
 	// Stock operations
 	UpdateStock(id string, quantity int) error
 	GetStockHistory(id string) ([]models.InventoryActivity, error)
+	GetLowStockProducts() ([]*models.Product, error) // Get products with stock level below reorder level
 
 	// Attribute operations
 	AddAttribute(productID string, attribute Attribute) error
@@ -663,36 +664,49 @@ func (r *ProductRepositoryImpl) GetVariants(parentID string) ([]*models.Product,
 }
 
 func (r *ProductRepositoryImpl) GetStockHistory(id string) ([]models.InventoryActivity, error) {
-	// Query to get the inventory activity for a product
-	query := `
-		SELECT 
-			p.inventory_activity->>'sales_count' as sales_count,
-			p.inventory_activity->>'stock_in' as stock_in,
-			p.inventory_activity->>'reject' as reject
-		FROM products p 
-		WHERE p.id = $1 AND p.deleted_at IS NULL`
-
-	var activityStr struct {
-		salesCount string
-		stockIn    string
-		reject     string
+	// First, check if product exists
+	exists, err := r.productExists(id)
+	if err != nil {
+		return nil, err
 	}
-
-	err := r.db.QueryRow(context.Background(), query, id).Scan(
-		&activityStr.salesCount, &activityStr.stockIn, &activityStr.reject,
-	)
-
+	if !exists {
+		return nil, errors.New("product not found")
+	}
+	
+	// Get activity from product 
+	query := `SELECT inventory_activity FROM products WHERE id = $1 AND deleted_at IS NULL`
+	
+	var activityJSON string
+	err = r.db.QueryRow(context.Background(), query, id).Scan(&activityJSON)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("product not found")
 		}
-		return nil, fmt.Errorf("error getting stock history: %w", err)
+		return nil, fmt.Errorf("error getting product inventory: %w", err)
+	}
+	
+	// Parse activity JSON
+	var activityStr struct {
+		SalesCount string `json:"sales_count"`
+		StockIn    string `json:"stock_in"`
+		Reject     string `json:"reject"`
+	}
+	
+	// If no activity yet, return empty data
+	if activityJSON == "" || activityJSON == "null" {
+		return []models.InventoryActivity{}, nil
+	}
+	
+	// Parse JSON
+	err = json.Unmarshal([]byte(activityJSON), &activityStr)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing inventory activity: %w", err)
 	}
 	
 	// Convert string values to integer
-	salesCount, _ := strconv.Atoi(activityStr.salesCount)
-	stockIn, _ := strconv.Atoi(activityStr.stockIn)
-	reject, _ := strconv.Atoi(activityStr.reject)
+	salesCount, _ := strconv.Atoi(activityStr.SalesCount)
+	stockIn, _ := strconv.Atoi(activityStr.StockIn)
+	reject, _ := strconv.Atoi(activityStr.Reject)
 	
 	// Create an inventory activity entry
 	activity := models.InventoryActivity{
@@ -700,9 +714,72 @@ func (r *ProductRepositoryImpl) GetStockHistory(id string) ([]models.InventoryAc
 		StockIn:    stockIn,
 		Reject:     reject,
 	}
-
+	
 	// Return as a slice since the interface expects a slice
 	return []models.InventoryActivity{activity}, nil
+}
+
+// GetLowStockProducts retrieves all products where stock is below or equal to reorder level
+// and reorder level is greater than 0
+func (r *ProductRepositoryImpl) GetLowStockProducts() ([]*models.Product, error) {
+	query := `
+		SELECT 
+			p.id, p.parent_id, p.stock, p.reorder_level, p.child_category_id, 
+			p.created_at, p.updated_at, p.deleted_at,
+			p.basic->>'name' as name,
+			p.basic->>'description' as description,
+			(p.basic->>'status')::int as status,
+			(p.basic->>'condition')::int as condition,
+			p.basic->>'sku' as sku,
+			(p.basic->>'is_variant')::boolean as is_variant,
+			p.price->>'price' as price,
+			p.price->>'currency' as currency
+		FROM products p 
+		WHERE p.deleted_at IS NULL
+		  AND p.reorder_level > 0
+		  AND p.stock <= p.reorder_level
+		ORDER BY p.stock ASC`
+	
+	rows, err := r.db.Query(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	var products []*models.Product
+	for rows.Next() {
+		product := &models.Product{}
+		var priceStr string
+		var deletedAt pgtype.Timestamp
+		
+		err := rows.Scan(
+			&product.ID, &product.ParentID, &product.Stock, &product.ReorderLevel, &product.ChildCategoryID,
+			&product.CreatedAt, &product.UpdatedAt, &deletedAt,
+			&product.Basic.Name, &product.Basic.Description, &product.Basic.Status,
+			&product.Basic.Condition, &product.Basic.SKU, &product.Basic.IsVariant,
+			&priceStr, &product.Price.Currency,
+		)
+		
+		if err != nil {
+			return nil, fmt.Errorf("error scanning product: %w", err)
+		}
+		
+		// Convert string values to proper types
+		if priceStr != "" {
+			price, err := strconv.ParseFloat(priceStr, 64)
+			if err == nil {
+				product.Price.Price = price
+			}
+		}
+		
+		if deletedAt.Valid {
+			product.DeletedAt = &deletedAt.Time
+		}
+		
+		products = append(products, product)
+	}
+	
+	return products, nil
 }
 
 func (r *ProductRepositoryImpl) GetBySKU(sku string) (*models.Product, error) {

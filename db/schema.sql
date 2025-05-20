@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS products (
     id VARCHAR(36) PRIMARY KEY,
     parent_id VARCHAR(36) REFERENCES products(id),
     stock INTEGER NOT NULL DEFAULT 0,
+    reorder_level INTEGER DEFAULT 0,
     child_category_id VARCHAR(36) REFERENCES categories(id),
     basic JSONB NOT NULL,
     price JSONB NOT NULL,

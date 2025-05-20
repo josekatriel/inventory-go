@@ -12,9 +12,10 @@ import (
 )
 
 type Product struct {
-	ID       string  `json:"id" db:"id"`
-	ParentID *string `json:"parent_id,omitempty" db:"parent_id"`
-	Stock    int     `json:"stock" db:"stock"`
+	ID           string  `json:"id" db:"id"`
+	ParentID     *string `json:"parent_id,omitempty" db:"parent_id"`
+	Stock        int     `json:"stock" db:"stock"`
+	ReorderLevel int     `json:"reorder_level" db:"reorder_level"`
 
 	// Embedded fields
 	Basic             BasicInfo         `json:"basic"`

@@ -36,7 +36,7 @@
 - ⬜ **Warehouse/Location Management**: Manage multiple warehouses or storage locations
 - ⬜ **Stock Transfer**: Move inventory between locations
 - ⬜ **Stock Take/Inventory Counts**: Dedicated module for physical inventory counts
-- ⬜ **Low Stock Alerts**: Notification system for products reaching reorder points
+- ✅ **Low Stock Alerts**: Notification system for products reaching reorder points
 - ⬜ **Stock Reservation**: Reserve stock for pending orders
 
 ### Financial Features
@@ -83,9 +83,9 @@
 ## Implementation Priority Suggestions
 
 ### High Priority (Next Steps)
-1. **User Authentication/Authorization** - Critical for securing the system
-2. **Low Stock Alerts** - Prevent stockouts
-3. **Barcode/QR Code Support** - Improve operational efficiency 
+1. **Barcode/QR Code Support** - Improve operational efficiency with product scanning
+2. **Export/Import Functionality** - Enable data migration and backup in CSV/Excel formats
+3. **Comprehensive Testing** - Ensure system reliability with unit and integration tests
 4. **Warehouse/Location Management** - Support for businesses with multiple locations
 
 ### Medium Priority
