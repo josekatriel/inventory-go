@@ -59,6 +59,35 @@ GET /products
 - `category` (optional): Filter by category ID
 - `search` (optional): Search term for product name or SKU
 
+#### Get Low Stock Products
+```
+GET /products/low-stock
+```
+
+Returns products where current stock is at or below the reorder level. Useful for identifying items that need to be restocked.
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "uuid-here",
+      "stock": 5,
+      "reorder_level": 10,
+      "basic": {
+        "name": "Product Name",
+        "sku": "SKU001"
+      },
+      "price": {
+        "price": 29.99
+      }
+    }
+  ],
+  "total": 1,
+  "message": "Products below their reorder threshold. These items need to be restocked."
+}
+```
+
 #### Get Product by ID
 ```
 GET /products/{id}

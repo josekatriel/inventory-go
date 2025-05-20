@@ -18,6 +18,7 @@ func SetupRoutes(r *mux.Router, db *pgx.Conn) {
 	rejectHandler := handlers.NewRejectHandler(db)
 
 	// Product routes
+	r.HandleFunc("/api/products/low-stock", productHandler.GetLowStockProducts).Methods("GET") // Specific route first
 	r.HandleFunc("/api/products", productHandler.CreateProduct).Methods("POST")
 	r.HandleFunc("/api/products", productHandler.GetAllProducts).Methods("GET")
 	r.HandleFunc("/api/products/{id}", productHandler.GetProduct).Methods("GET")

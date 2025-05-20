@@ -219,3 +219,28 @@ func (h *ProductHandler) GetAllProducts(w http.ResponseWriter, r *http.Request) 
 		},
 	})
 }
+
+// GetLowStockProducts retrieves products where stock is at or below the reorder level
+func (h *ProductHandler) GetLowStockProducts(w http.ResponseWriter, r *http.Request) {
+	// Get all products with low stock
+	productPtrs, err := h.prodRepo.GetLowStockProducts()
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Convert []*models.Product to []models.Product for consistency
+	products := make([]models.Product, 0, len(productPtrs))
+	for _, p := range productPtrs {
+		if p != nil {
+			products = append(products, *p)
+		}
+	}
+
+	// Add some helpful metadata to the response
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"data": products,
+		"total": len(products),
+		"message": "Products below their reorder threshold. These items need to be restocked.",
+	})
+}
