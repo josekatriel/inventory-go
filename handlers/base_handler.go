@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ---- utils ----
@@ -24,5 +24,5 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 // ---- handlers ----
 // BaseHandler contains common handler dependencies
 type BaseHandler struct {
-	DB *pgx.Conn
+	DB *pgxpool.Pool
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type CategoryRepository interface {
@@ -27,7 +28,7 @@ type CategoryRepositoryImpl struct {
 	*BaseRepository
 }
 
-func NewCategoryRepository(db *pgx.Conn) CategoryRepository {
+func NewCategoryRepository(db *pgxpool.Pool) CategoryRepository {
 	return &CategoryRepositoryImpl{
 		BaseRepository: NewBaseRepository(db),
 	}
@@ -42,7 +43,16 @@ func (r *CategoryRepositoryImpl) GetAll() ([]models.Category, error) {
 	          WHERE deleted_at IS NULL
 	          ORDER BY sort_order ASC, name ASC`
 
-	rows, err := r.db.Query(context.Background(), query)
+	ctx := context.Background()
+	
+	// Acquire a connection from the pool
+	conn, err := r.db.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire connection from pool: %w", err)
+	}
+	defer conn.Release()
+
+	rows, err := conn.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query categories: %w", err)
 	}

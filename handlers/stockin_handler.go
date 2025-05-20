@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // StockInHandler handles stock-in related operations
@@ -21,7 +21,7 @@ type StockInHandler struct {
 }
 
 // NewStockInHandler creates a new StockInHandler
-func NewStockInHandler(db *pgx.Conn) *StockInHandler {
+func NewStockInHandler(db *pgxpool.Pool) *StockInHandler {
 	return &StockInHandler{
 		BaseHandler:  &BaseHandler{DB: db},
 		stockInRepo:  repositories.NewStockInRepository(db),

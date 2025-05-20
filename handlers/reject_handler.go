@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // RejectHandler handles reject-related operations
@@ -20,7 +20,7 @@ type RejectHandler struct {
 }
 
 // NewRejectHandler creates a new RejectHandler
-func NewRejectHandler(db *pgx.Conn) *RejectHandler {
+func NewRejectHandler(db *pgxpool.Pool) *RejectHandler {
 	return &RejectHandler{
 		BaseHandler: &BaseHandler{DB: db},
 		rejectRepo:  repositories.NewRejectRepository(db),

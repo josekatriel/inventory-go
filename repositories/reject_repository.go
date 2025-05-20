@@ -1,6 +1,8 @@
 package repositories
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"inventory-go/models"
 	"strings"
@@ -8,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // RejectRepository defines methods for reject operations
@@ -27,11 +30,11 @@ type RejectRepository interface {
 
 // RejectRepositoryImpl implements the RejectRepository interface
 type RejectRepositoryImpl struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
 // NewRejectRepository creates a new RejectRepository
-func NewRejectRepository(db *pgx.Conn) RejectRepository {
+func NewRejectRepository(db *pgxpool.Pool) RejectRepository {
 	return &RejectRepositoryImpl{db: db}
 }
 
@@ -44,15 +47,15 @@ func (r *RejectRepositoryImpl) GetByID(id string) (*models.Reject, error) {
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 	var reject models.Reject
-	err := r.db.QueryRow(nil, query, id).Scan(
+	err := r.db.QueryRow(context.Background(), query, id).Scan(
 		&reject.ID, &reject.ReferenceNo, &reject.Status, &reject.RejectDate,
 		&reject.Reason, &reject.Total, &reject.CreatedAt, &reject.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, nil
+			return nil, errors.New("reject not found")
 		}
-		return nil, err
+		return nil, fmt.Errorf("error getting reject: %w", err)
 	}
 
 	// Get the reject items
@@ -61,9 +64,9 @@ func (r *RejectRepositoryImpl) GetByID(id string) (*models.Reject, error) {
 		FROM reject_items
 		WHERE reject_id = $1 AND deleted_at IS NULL
 	`
-	rows, err := r.db.Query(nil, itemsQuery, id)
+	rows, err := r.db.Query(context.Background(), itemsQuery, id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error getting reject items: %w", err)
 	}
 	defer rows.Close()
 
@@ -90,7 +93,7 @@ func (r *RejectRepositoryImpl) GetByReference(reference string) (*models.Reject,
 		WHERE reference_no = $1 AND deleted_at IS NULL
 	`
 	var id string
-	err := r.db.QueryRow(nil, query, reference).Scan(&id)
+	err := r.db.QueryRow(context.Background(), query, reference).Scan(&id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
@@ -104,11 +107,11 @@ func (r *RejectRepositoryImpl) GetByReference(reference string) (*models.Reject,
 // Create creates a new reject
 func (r *RejectRepositoryImpl) Create(reject *models.Reject) error {
 	// Start a transaction
-	tx, err := r.db.Begin(nil)
+	tx, err := r.db.Begin(context.Background())
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(nil)
+	defer tx.Rollback(context.Background())
 
 	// Generate ID if not provided
 	if reject.ID == "" {
@@ -122,7 +125,7 @@ func (r *RejectRepositoryImpl) Create(reject *models.Reject) error {
 		RETURNING id
 	`
 	var id string
-	err = tx.QueryRow(nil, query,
+	err = tx.QueryRow(context.Background(), query,
 		reject.ID, reject.ReferenceNo, reject.Status, reject.RejectDate,
 		reject.Reason, reject.Total, time.Now(), time.Now(),
 	).Scan(&id)
@@ -143,7 +146,7 @@ func (r *RejectRepositoryImpl) Create(reject *models.Reject) error {
 			INSERT INTO reject_items (id, reject_id, product_id, product_name, quantity, unit_cost, subtotal, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		`
-		_, err = tx.Exec(nil, itemQuery,
+		_, err = tx.Exec(context.Background(), itemQuery,
 			item.ID, item.RejectID, item.ProductID, item.ProductName,
 			item.Quantity, item.UnitCost, item.Subtotal, time.Now(), time.Now(),
 		)
@@ -160,7 +163,7 @@ func (r *RejectRepositoryImpl) Create(reject *models.Reject) error {
 		}
 
 		updateQuery := `UPDATE rejects SET total = $1 WHERE id = $2`
-		_, err = tx.Exec(nil, updateQuery, total, id)
+		_, err = tx.Exec(context.Background(), updateQuery, total, id)
 		if err != nil {
 			return err
 		}
@@ -168,7 +171,7 @@ func (r *RejectRepositoryImpl) Create(reject *models.Reject) error {
 	}
 
 	// Commit the transaction
-	return tx.Commit(nil)
+	return tx.Commit(context.Background())
 }
 
 // Update updates an existing reject
@@ -178,7 +181,7 @@ func (r *RejectRepositoryImpl) Update(reject *models.Reject) error {
 		SET reference_no = $1, status = $2, reject_date = $3, reason = $4, total = $5, updated_at = $6
 		WHERE id = $7 AND deleted_at IS NULL
 	`
-	_, err := r.db.Exec(nil, query,
+	_, err := r.db.Exec(context.Background(), query,
 		reject.ReferenceNo, reject.Status, reject.RejectDate,
 		reject.Reason, reject.Total, time.Now(), reject.ID,
 	)
@@ -188,28 +191,28 @@ func (r *RejectRepositoryImpl) Update(reject *models.Reject) error {
 // Delete soft-deletes a reject
 func (r *RejectRepositoryImpl) Delete(id string) error {
 	// Start a transaction
-	tx, err := r.db.Begin(nil)
+	tx, err := r.db.Begin(context.Background())
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(nil)
+	defer tx.Rollback(context.Background())
 
 	// Delete the reject items
 	itemsQuery := `UPDATE reject_items SET deleted_at = $1 WHERE reject_id = $2`
-	_, err = tx.Exec(nil, itemsQuery, time.Now(), id)
+	_, err = tx.Exec(context.Background(), itemsQuery, time.Now(), id)
 	if err != nil {
 		return err
 	}
 
 	// Delete the reject
 	query := `UPDATE rejects SET deleted_at = $1 WHERE id = $2`
-	_, err = tx.Exec(nil, query, time.Now(), id)
+	_, err = tx.Exec(context.Background(), query, time.Now(), id)
 	if err != nil {
 		return err
 	}
 
 	// Commit the transaction
-	return tx.Commit(nil)
+	return tx.Commit(context.Background())
 }
 
 // List retrieves a list of rejects with pagination and filtering
@@ -241,7 +244,7 @@ func (r *RejectRepositoryImpl) List(offset, limit int, status string, startDate,
 	whereClause := "WHERE " + strings.Join(conditions, " AND ")
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM rejects %s", whereClause)
 	var total int64
-	err := r.db.QueryRow(nil, countQuery, args...).Scan(&total)
+	err := r.db.QueryRow(context.Background(), countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -256,7 +259,7 @@ func (r *RejectRepositoryImpl) List(offset, limit int, status string, startDate,
 	`, whereClause, argIndex, argIndex+1)
 	args = append(args, limit, offset)
 
-	rows, err := r.db.Query(nil, query, args...)
+	rows, err := r.db.Query(context.Background(), query, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -286,18 +289,18 @@ func (r *RejectRepositoryImpl) AddRejectItem(item *models.RejectItem) error {
 	}
 
 	// Start a transaction
-	tx, err := r.db.Begin(nil)
+	tx, err := r.db.Begin(context.Background())
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(nil)
+	defer tx.Rollback(context.Background())
 
 	// Insert the item
 	query := `
 		INSERT INTO reject_items (id, reject_id, product_id, product_name, quantity, unit_cost, subtotal, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
-	_, err = tx.Exec(nil, query,
+	_, err = tx.Exec(context.Background(), query,
 		item.ID, item.RejectID, item.ProductID, item.ProductName,
 		item.Quantity, item.UnitCost, item.Subtotal, time.Now(), time.Now(),
 	)
@@ -312,23 +315,23 @@ func (r *RejectRepositoryImpl) AddRejectItem(item *models.RejectItem) error {
 		    updated_at = $2
 		WHERE id = $1
 	`
-	_, err = tx.Exec(nil, updateQuery, item.RejectID, time.Now())
+	_, err = tx.Exec(context.Background(), updateQuery, item.RejectID, time.Now())
 	if err != nil {
 		return err
 	}
 
 	// Commit the transaction
-	return tx.Commit(nil)
+	return tx.Commit(context.Background())
 }
 
 // UpdateRejectItem updates an existing reject item
 func (r *RejectRepositoryImpl) UpdateRejectItem(item *models.RejectItem) error {
 	// Start a transaction
-	tx, err := r.db.Begin(nil)
+	tx, err := r.db.Begin(context.Background())
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(nil)
+	defer tx.Rollback(context.Background())
 
 	// Update the item
 	query := `
@@ -336,7 +339,7 @@ func (r *RejectRepositoryImpl) UpdateRejectItem(item *models.RejectItem) error {
 		SET product_id = $1, product_name = $2, quantity = $3, unit_cost = $4, subtotal = $5, updated_at = $6
 		WHERE id = $7 AND deleted_at IS NULL
 	`
-	_, err = tx.Exec(nil, query,
+	_, err = tx.Exec(context.Background(), query,
 		item.ProductID, item.ProductName, item.Quantity,
 		item.UnitCost, item.Subtotal, time.Now(), item.ID,
 	)
@@ -351,35 +354,35 @@ func (r *RejectRepositoryImpl) UpdateRejectItem(item *models.RejectItem) error {
 		    updated_at = $2
 		WHERE id = $1
 	`
-	_, err = tx.Exec(nil, updateQuery, item.RejectID, time.Now())
+	_, err = tx.Exec(context.Background(), updateQuery, item.RejectID, time.Now())
 	if err != nil {
 		return err
 	}
 
 	// Commit the transaction
-	return tx.Commit(nil)
+	return tx.Commit(context.Background())
 }
 
 // DeleteRejectItem soft-deletes a reject item
 func (r *RejectRepositoryImpl) DeleteRejectItem(id string) error {
 	// Start a transaction
-	tx, err := r.db.Begin(nil)
+	tx, err := r.db.Begin(context.Background())
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(nil)
+	defer tx.Rollback(context.Background())
 
 	// Get the reject ID for the item
 	var rejectID string
 	idQuery := `SELECT reject_id FROM reject_items WHERE id = $1 AND deleted_at IS NULL`
-	err = tx.QueryRow(nil, idQuery, id).Scan(&rejectID)
+	err = tx.QueryRow(context.Background(), idQuery, id).Scan(&rejectID)
 	if err != nil {
 		return err
 	}
 
 	// Delete the item
 	query := `UPDATE reject_items SET deleted_at = $1 WHERE id = $2`
-	_, err = tx.Exec(nil, query, time.Now(), id)
+	_, err = tx.Exec(context.Background(), query, time.Now(), id)
 	if err != nil {
 		return err
 	}
@@ -391,13 +394,13 @@ func (r *RejectRepositoryImpl) DeleteRejectItem(id string) error {
 		    updated_at = $2
 		WHERE id = $1
 	`
-	_, err = tx.Exec(nil, updateQuery, rejectID, time.Now())
+	_, err = tx.Exec(context.Background(), updateQuery, rejectID, time.Now())
 	if err != nil {
 		return err
 	}
 
 	// Commit the transaction
-	return tx.Commit(nil)
+	return tx.Commit(context.Background())
 }
 
 // GetRejectSummary retrieves summary statistics for rejects within a date range
@@ -416,7 +419,7 @@ func (r *RejectRepositoryImpl) GetRejectSummary(startDate, endDate time.Time) (*
 	`
 
 	var summary models.RejectSummary
-	err := r.db.QueryRow(nil, query, startDate, endDate).Scan(
+	err := r.db.QueryRow(context.Background(), query, startDate, endDate).Scan(
 		&summary.TotalRejects,
 		&summary.TotalCompletedRejects,
 		&summary.TotalPendingRejects,
@@ -449,7 +452,7 @@ func (r *RejectRepositoryImpl) GetDailyReject(startDate, endDate time.Time) ([]m
 		ORDER BY DATE(reject_date)
 	`
 
-	rows, err := r.db.Query(nil, query, startDate, endDate)
+	rows, err := r.db.Query(context.Background(), query, startDate, endDate)
 	if err != nil {
 		return nil, err
 	}

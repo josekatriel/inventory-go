@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type SupplierRepository interface {
@@ -27,10 +28,10 @@ type SupplierRepository interface {
 }
 
 type SupplierRepositoryImpl struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
-func NewSupplierRepository(db *pgx.Conn) SupplierRepository {
+func NewSupplierRepository(db *pgxpool.Pool) SupplierRepository {
 	return &SupplierRepositoryImpl{db: db}
 }
 

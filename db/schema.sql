@@ -10,6 +10,9 @@ CREATE TABLE IF NOT EXISTS categories (
     slug VARCHAR(255) NOT NULL UNIQUE,
     description TEXT,
     parent_id VARCHAR(36) REFERENCES categories(id),
+    status INTEGER DEFAULT 1,
+    sort_order INTEGER DEFAULT 0,
+    image_url TEXT,
     breadcrumbs JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -22,7 +25,7 @@ CREATE TABLE IF NOT EXISTS products (
     parent_id VARCHAR(36) REFERENCES products(id),
     stock INTEGER NOT NULL DEFAULT 0,
     reorder_level INTEGER DEFAULT 0,
-    child_category_id VARCHAR(36) REFERENCES categories(id),
+    category_id VARCHAR(36) REFERENCES categories(id),
     basic JSONB NOT NULL,
     price JSONB NOT NULL,
     weight JSONB NOT NULL,
@@ -54,6 +57,9 @@ CREATE TABLE IF NOT EXISTS customers (
     country VARCHAR(100),
     postal_code VARCHAR(20),
     notes TEXT,
+    total_orders INTEGER DEFAULT 0,
+    total_spent DECIMAL(10, 2) DEFAULT 0,
+    last_order_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     deleted_at TIMESTAMP WITH TIME ZONE
@@ -72,6 +78,9 @@ CREATE TABLE IF NOT EXISTS suppliers (
     country VARCHAR(100),
     postal_code VARCHAR(20),
     notes TEXT,
+    total_purchases INTEGER DEFAULT 0,
+    total_spent DECIMAL(10, 2) DEFAULT 0,
+    last_order_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     deleted_at TIMESTAMP WITH TIME ZONE
@@ -116,6 +125,8 @@ CREATE TABLE IF NOT EXISTS sales (
     tax DECIMAL(10, 2) DEFAULT 0,
     shipping_fee DECIMAL(10, 2) DEFAULT 0,
     grand_total DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    paid DECIMAL(10, 2) DEFAULT 0,
+    balance DECIMAL(10, 2) GENERATED ALWAYS AS (grand_total - paid) STORED,
     payment_status VARCHAR(20) DEFAULT 'unpaid',
     payment_method VARCHAR(50),
     platform VARCHAR(50) DEFAULT 'pos',
@@ -133,6 +144,8 @@ CREATE TABLE IF NOT EXISTS sale_items (
     product_name VARCHAR(255) NOT NULL,
     quantity INTEGER NOT NULL DEFAULT 1,
     unit_price DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    tax DECIMAL(10, 2) DEFAULT 0,
+    discount DECIMAL(10, 2) DEFAULT 0,
     subtotal DECIMAL(10, 2) NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -181,6 +194,8 @@ CREATE INDEX IF NOT EXISTS idx_sale_items_product_id ON sale_items(product_id);
 CREATE INDEX IF NOT EXISTS idx_rejects_status ON rejects(status);
 CREATE INDEX IF NOT EXISTS idx_reject_items_reject_id ON reject_items(reject_id);
 CREATE INDEX IF NOT EXISTS idx_reject_items_product_id ON reject_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_categories_status ON categories(status);
+CREATE INDEX IF NOT EXISTS idx_categories_sort_order ON categories(sort_order);
 
 -- Create triggers for updating the timestamps
 CREATE OR REPLACE FUNCTION update_timestamp()

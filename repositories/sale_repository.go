@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type SaleRepository interface {
@@ -27,10 +28,10 @@ type SaleRepository interface {
 }
 
 type SaleRepositoryImpl struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
-func NewSaleRepository(db *pgx.Conn) SaleRepository {
+func NewSaleRepository(db *pgxpool.Pool) SaleRepository {
 	return &SaleRepositoryImpl{db: db}
 }
 
@@ -59,7 +60,7 @@ func (r *SaleRepositoryImpl) GetByID(id string) (*models.Sale, error) {
 	// Get sale items
 	itemsQuery := `SELECT id, product_id, product_name, quantity, unit_price, tax, discount, subtotal
 		FROM sale_items WHERE sale_id = $1 AND deleted_at IS NULL`
-		
+
 	rows, err := r.db.Query(ctx, itemsQuery, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sale items: %w", err)
@@ -70,7 +71,7 @@ func (r *SaleRepositoryImpl) GetByID(id string) (*models.Sale, error) {
 	for rows.Next() {
 		var item models.SaleItem
 		item.SaleID = id
-		
+
 		err := rows.Scan(
 			&item.ID, &item.ProductID, &item.ProductName, &item.Quantity,
 			&item.UnitPrice, &item.Tax, &item.Discount, &item.Subtotal,
@@ -89,7 +90,7 @@ func (r *SaleRepositoryImpl) GetByReference(referenceNo string) (*models.Sale, e
 	// First get the ID of the sale by reference
 	var id string
 	query := `SELECT id FROM sales WHERE reference_no = $1 AND deleted_at IS NULL`
-	
+
 	err := r.db.QueryRow(context.Background(), query, referenceNo).Scan(&id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -97,7 +98,7 @@ func (r *SaleRepositoryImpl) GetByReference(referenceNo string) (*models.Sale, e
 		}
 		return nil, fmt.Errorf("failed to get sale by reference: %w", err)
 	}
-	
+
 	// Then use GetByID to get the full sale
 	return r.GetByID(id)
 }
@@ -115,13 +116,29 @@ func (r *SaleRepositoryImpl) Create(sale *models.Sale) error {
 	if sale.ID == "" {
 		sale.ID = uuid.NewString()
 	}
-	
+
+	// Look up product names for items where ProductName is not provided
+	for i, item := range sale.Items {
+		if item.ProductName == "" && item.ProductID != "" {
+			// Query the product to get its name
+			var productName string
+			err := tx.QueryRow(ctx, "SELECT name FROM products WHERE id = $1 AND deleted_at IS NULL", item.ProductID).Scan(&productName)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return fmt.Errorf("product with ID %s not found", item.ProductID)
+				}
+				return fmt.Errorf("failed to fetch product name: %w", err)
+			}
+			sale.Items[i].ProductName = productName
+		}
+	}
+
 	// Insert sale
 	saleQuery := `INSERT INTO sales (
 		id, reference_no, status, sale_date, note, total, paid, balance,
 		customer_id, platform, created_at, updated_at
 	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
-	
+
 	_, err = tx.Exec(ctx, saleQuery,
 		sale.ID, sale.ReferenceNo, sale.Status, sale.SaleDate, sale.Note,
 		sale.Total, sale.Paid, sale.Balance, sale.CustomerID, sale.Platform,
@@ -129,6 +146,27 @@ func (r *SaleRepositoryImpl) Create(sale *models.Sale) error {
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert sale: %w", err)
+	}
+
+	// Insert sale items
+	itemQuery := `INSERT INTO sale_items (
+		id, sale_id, product_id, product_name, quantity, unit_price, 
+		tax, discount, subtotal, created_at, updated_at
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+
+	for _, item := range sale.Items {
+		item.ID = uuid.NewString()
+		item.SaleID = sale.ID
+		item.CalculateSubtotal()
+
+		_, err = tx.Exec(ctx, itemQuery,
+			item.ID, item.SaleID, item.ProductID, item.ProductName, item.Quantity,
+			item.UnitPrice, item.Tax, item.Discount, item.Subtotal,
+			time.Now(), time.Now(),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert sale item: %w", err)
+		}
 	}
 
 	// Update customer stats if customer exists
@@ -139,7 +177,7 @@ func (r *SaleRepositoryImpl) Create(sale *models.Sale) error {
 			last_order_at = $2,
 			updated_at = $3
 			WHERE id = $4`
-		
+
 		_, err = tx.Exec(ctx, updateCustomerQuery,
 			sale.Total, time.Now(), time.Now(), *sale.CustomerID,
 		)
@@ -147,12 +185,12 @@ func (r *SaleRepositoryImpl) Create(sale *models.Sale) error {
 			return fmt.Errorf("failed to update customer stats: %w", err)
 		}
 	}
-	
+
 	// Commit transaction
 	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -166,29 +204,29 @@ func (r *SaleRepositoryImpl) Update(sale *models.Sale) error {
 	defer tx.Rollback(ctx)
 
 	sale.UpdatedAt = time.Now()
-	
+
 	// Update the basic sale information
 	updateQuery := `UPDATE sales SET 
 		reference_no = $1, status = $2, sale_date = $3, note = $4, 
 		total = $5, paid = $6, balance = $7, customer_id = $8, 
 		platform = $9, updated_at = $10
 		WHERE id = $11`
-	
+
 	_, err = tx.Exec(ctx, updateQuery,
 		sale.ReferenceNo, sale.Status, sale.SaleDate, sale.Note,
 		sale.Total, sale.Paid, sale.Balance, sale.CustomerID,
 		sale.Platform, sale.UpdatedAt, sale.ID,
 	)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to update sale: %w", err)
 	}
-	
+
 	// Commit the transaction
 	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
+
 	return nil
 }
 

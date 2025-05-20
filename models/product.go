@@ -24,10 +24,10 @@ type Product struct {
 	InventoryActivity InventoryActivity `json:"inventory_activity,omitempty"`
 
 	// Relations
-	Images          []*Images  `json:"pictures,omitempty"`
-	Variants        []*Product `json:"variants,omitempty"`
-	ChildCategoryID *string    `json:"child_category_id,omitempty" db:"child_category_id"`
-	Category        *Category  `json:"category,omitempty"`
+	Images     []*Images  `json:"pictures,omitempty" db:"-"`
+	Parent     *Product   `json:"-" db:"-"`
+	Variants   []*Product `json:"variants,omitempty" db:"-"`
+	CategoryID *string    `json:"category_id,omitempty" db:"category_id"`
 
 	// Timestamps
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
@@ -155,8 +155,19 @@ func (p *Product) LoadVariants(db pgx.Tx) error {
 		return nil
 	}
 
-	rows, err := db.Query(context.Background(),
-		"SELECT * FROM products WHERE parent_id = $1", p.ID)
+	// Explicitly select only the columns that exist in the database
+	query := `
+		SELECT 
+			id, parent_id, stock, reorder_level, category_id, 
+			created_at, updated_at, deleted_at,
+			basic->>'name', basic->>'description', 
+			(basic->>'status')::int, (basic->>'condition')::int,
+			basic->>'sku', (basic->>'is_variant')::boolean,
+			price->>'price', price->>'currency'
+		FROM products 
+		WHERE parent_id = $1 AND deleted_at IS NULL`
+
+	rows, err := db.Query(context.Background(), query, p.ID)
 	if err != nil {
 		return err
 	}
@@ -165,16 +176,13 @@ func (p *Product) LoadVariants(db pgx.Tx) error {
 	var variants []*Product
 	for rows.Next() {
 		var variant Product
+		// Scan only into the fields that match the columns we selected
 		err := rows.Scan(
-			&variant.ID, &variant.ParentID, &variant.Stock,
+			&variant.ID, &variant.ParentID, &variant.Stock, &variant.ReorderLevel, &variant.CategoryID,
+			&variant.CreatedAt, &variant.UpdatedAt, &variant.DeletedAt,
 			&variant.Basic.Name, &variant.Basic.Description, &variant.Basic.Status,
 			&variant.Basic.Condition, &variant.Basic.SKU, &variant.Basic.IsVariant,
-			&variant.Price.Price, &variant.Price.Currency, &variant.Price.LastUpdateUnix,
-			&variant.Weight.Weight, &variant.Weight.Unit,
-			&variant.InventoryActivity.SalesCount, &variant.InventoryActivity.StockIn,
-			&variant.InventoryActivity.Reject,
-			&variant.ChildCategoryID,
-			&variant.CreatedAt, &variant.UpdatedAt, &variant.DeletedAt,
+			&variant.Price.Price, &variant.Price.Currency,
 		)
 		if err != nil {
 			return err
@@ -193,7 +201,7 @@ func (p *Product) LoadVariants(db pgx.Tx) error {
 // BeforeDelete handles cleanup before deleting a product
 func (p *Product) BeforeDelete(db pgx.Tx) error {
 	// Delete all variants
-	_, err := db.Exec(context.Background(), 
+	_, err := db.Exec(context.Background(),
 		"DELETE FROM products WHERE parent_id = $1", p.ID)
 	if err != nil {
 		return fmt.Errorf("error deleting variants: %w", err)
@@ -205,6 +213,6 @@ func (p *Product) BeforeDelete(db pgx.Tx) error {
 	if err != nil {
 		return fmt.Errorf("error deleting images: %w", err)
 	}
-	
+
 	return nil
 }

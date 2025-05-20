@@ -4,10 +4,10 @@ import (
 	"inventory-go/handlers"
 
 	"github.com/gorilla/mux"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func SetupRoutes(r *mux.Router, db *pgx.Conn) {
+func SetupRoutes(r *mux.Router, db *pgxpool.Pool) {
 	// Initialize handlers with database connection
 	productHandler := handlers.NewProductHandler(db)
 	categoryHandler := handlers.NewCategoryHandler(db)

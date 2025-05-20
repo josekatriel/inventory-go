@@ -8,7 +8,7 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // SupplierHandler handles supplier-related operations
@@ -18,7 +18,7 @@ type SupplierHandler struct {
 }
 
 // NewSupplierHandler creates a new SupplierHandler
-func NewSupplierHandler(db *pgx.Conn) *SupplierHandler {
+func NewSupplierHandler(db *pgxpool.Pool) *SupplierHandler {
 	return &SupplierHandler{
 		BaseHandler: &BaseHandler{DB: db},
 		repo:        repositories.NewSupplierRepository(db),

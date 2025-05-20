@@ -17,13 +17,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/xuri/excelize/v2"
 )
 
 // ExportImportHandler handles export and import operations for the application
 type ExportImportHandler struct {
-	db           *pgx.Conn
+	db           *pgxpool.Pool
 	productRepo  repositories.ProductRepository
 	categoryRepo repositories.CategoryRepository
 	customerRepo repositories.CustomerRepository
@@ -31,7 +31,7 @@ type ExportImportHandler struct {
 }
 
 // NewExportImportHandler creates a new export/import handler
-func NewExportImportHandler(db *pgx.Conn) *ExportImportHandler {
+func NewExportImportHandler(db *pgxpool.Pool) *ExportImportHandler {
 	return &ExportImportHandler{
 		db:           db,
 		productRepo:  repositories.NewProductRepository(db),

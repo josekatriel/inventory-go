@@ -8,7 +8,7 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // CustomerHandler handles customer-related operations
@@ -18,7 +18,7 @@ type CustomerHandler struct {
 }
 
 // NewCustomerHandler creates a new CustomerHandler
-func NewCustomerHandler(db *pgx.Conn) *CustomerHandler {
+func NewCustomerHandler(db *pgxpool.Pool) *CustomerHandler {
 	return &CustomerHandler{
 		BaseHandler: &BaseHandler{DB: db},
 		repo:        repositories.NewCustomerRepository(db),

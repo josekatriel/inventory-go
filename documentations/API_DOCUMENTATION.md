@@ -11,12 +11,15 @@
 7. [Export/Import](#exportimport)
 
 ## Base URL
+
 All API endpoints are prefixed with `/api`
 
 ## Authentication
+
 > Note: Authentication will be implemented in a future update.
 
 ## Response Format
+
 All API responses follow a standard format:
 
 ```json
@@ -30,6 +33,7 @@ All API responses follow a standard format:
 ## Error Responses
 
 ### 400 Bad Request
+
 ```json
 {
   "success": false,
@@ -39,6 +43,7 @@ All API responses follow a standard format:
 ```
 
 ### 404 Not Found
+
 ```json
 {
   "success": false,
@@ -47,6 +52,7 @@ All API responses follow a standard format:
 ```
 
 ### 500 Internal Server Error
+
 ```json
 {
   "success": false,
@@ -59,17 +65,20 @@ All API responses follow a standard format:
 ### Products
 
 #### Get All Products
+
 ```
 GET /products
 ```
 
 **Query Parameters:**
+
 - `page` (optional): Page number (default: 1)
 - `limit` (optional): Items per page (default: 10)
 - `category` (optional): Filter by category ID
 - `search` (optional): Search term for product name or SKU
 
 #### Get Low Stock Products
+
 ```
 GET /products/low-stock
 ```
@@ -77,6 +86,7 @@ GET /products/low-stock
 Returns products where current stock is at or below the reorder level. Useful for identifying items that need to be restocked.
 
 **Response:**
+
 ```json
 {
   "data": [
@@ -99,16 +109,19 @@ Returns products where current stock is at or below the reorder level. Useful fo
 ```
 
 #### Get Product by ID
+
 ```
 GET /products/{id}
 ```
 
 #### Create Product
+
 ```
 POST /products
 ```
 
 **Request Body:**
+
 ```json
 {
   "basic": {
@@ -118,15 +131,15 @@ POST /products
   },
   "price": {
     "price": 99.99,
-    "currency": "USD"
+    "currency": "IDR"
   },
-  "stock": 100,
-  "reorder_level": 10,
-  "child_category_id": "uuid-here"
+  "reorder_level": 5,
+  "category_id": "uuid-here"
 }
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -140,11 +153,11 @@ POST /products
     },
     "price": {
       "price": 99.99,
-      "currency": "USD",
+      "currency": "IDR",
       "last_update_unix": 1621500000
     },
-    "stock": 100,
-    "reorder_level": 10,
+    "stock": 0,
+    "reorder_level": 5,
     "child_category_id": "uuid-here",
     "created_at": "2023-01-01T00:00:00Z",
     "updated_at": "2023-01-01T00:00:00Z"
@@ -155,21 +168,25 @@ POST /products
 ### Categories
 
 #### Get All Categories
+
 ```
 GET /categories
 ```
 
 #### Get Category by ID or Slug
+
 ```
 GET /categories/{idOrSlug}
 ```
 
 #### Create Category
+
 ```
 POST /categories
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "Electronics",
@@ -182,6 +199,7 @@ POST /categories
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -204,16 +222,19 @@ POST /categories
 ### Customers
 
 #### Get All Customers
+
 ```
 GET /customers
 ```
 
 #### Create Customer
+
 ```
 POST /customers
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "John Doe",
@@ -225,6 +246,7 @@ POST /customers
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -244,26 +266,28 @@ POST /customers
 }
 ```
 
-
-
 ### Sales
 
 #### Get All Sales
+
 ```
 GET /sales
 ```
 
 #### Get Sale by ID
+
 ```
 GET /sales/{id}
 ```
 
 #### Create Sale
+
 ```
 POST /sales
 ```
 
 **Request Body:**
+
 ```json
 {
   "status": "draft",
@@ -277,7 +301,7 @@ POST /sales
       "product_name": "Product Name",
       "quantity": 2,
       "unit_price": 49.99,
-      "tax": 5.00,
+      "tax": 5.0,
       "discount": 0,
       "subtotal": 104.98
     }
@@ -295,6 +319,7 @@ POST /sales
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -322,7 +347,7 @@ POST /sales
         "product_name": "Product Name",
         "quantity": 2,
         "unit_price": 49.99,
-        "tax": 5.00,
+        "tax": 5.0,
         "discount": 0,
         "subtotal": 104.98,
         "created_at": "2023-01-01T10:00:00Z",
@@ -349,11 +374,13 @@ POST /sales
 ```
 
 #### Update Sale Status
+
 ```
 PATCH /sales/{id}/status
 ```
 
 **Request Body:**
+
 ```json
 {
   "status": "completed"
@@ -361,6 +388,7 @@ PATCH /sales/{id}/status
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -373,40 +401,45 @@ PATCH /sales/{id}/status
 ```
 
 #### Add Payment to Sale
+
 ```
 POST /sales/{id}/payments
 ```
 
 **Request Body:**
+
 ```json
 {
-  "amount": 50.00,
+  "amount": 50.0,
   "payment_method": "cash",
   "reference": "CASH12345",
   "note": "Partial payment",
   "payment_date": "2023-01-01T12:00:00Z"
 }
 ```
-```
 
 ### Suppliers
 
 #### Get All Suppliers
+
 ```
 GET /suppliers
 ```
 
 #### Get Supplier by ID
+
 ```
 GET /suppliers/{id}
 ```
 
 #### Create Supplier
+
 ```
 POST /suppliers
 ```
 
 **Request Body:**
+
 ```json
 {
   "name": "ABC Supplies Inc.",
@@ -419,6 +452,7 @@ POST /suppliers
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -442,11 +476,13 @@ POST /suppliers
 ### Stock In
 
 #### Create Stock In
+
 ```
 POST /stockins
 ```
 
 **Request Body:**
+
 ```json
 {
   "supplier_id": "uuid-here",
@@ -467,11 +503,13 @@ POST /stockins
 ### Rejects (Stock Decrease)
 
 #### Create Reject
+
 ```
 POST /rejects
 ```
 
 **Request Body:**
+
 ```json
 {
   "reference_no": "REJ-001",
@@ -491,14 +529,17 @@ POST /rejects
 ```
 
 ## Rate Limiting
+
 > Note: Rate limiting will be implemented in a future update.
 
 ## Versioning
+
 API versioning will be implemented in a future update.
 
 ## Export/Import
 
 ### Export Products
+
 ```
 GET /export/products
 ```
@@ -506,12 +547,14 @@ GET /export/products
 Exports product data in CSV or Excel format.
 
 **Query Parameters**:
+
 - `format` (optional): Export format, either `csv` (default) or `excel`
 
 **Response**:
 Returns a downloadable file in the requested format containing product data.
 
 ### Export Categories
+
 ```
 GET /export/categories
 ```
@@ -519,12 +562,14 @@ GET /export/categories
 Exports category data in CSV or Excel format.
 
 **Query Parameters**:
+
 - `format` (optional): Export format, either `csv` (default) or `excel`
 
 **Response**:
 Returns a downloadable file in the requested format containing category data.
 
 ### Export Customers
+
 ```
 GET /export/customers
 ```
@@ -532,12 +577,14 @@ GET /export/customers
 Exports customer data in CSV or Excel format.
 
 **Query Parameters**:
+
 - `format` (optional): Export format, either `csv` (default) or `excel`
 
 **Response**:
 Returns a downloadable file in the requested format containing customer data.
 
 ### Export Suppliers
+
 ```
 GET /export/suppliers
 ```
@@ -545,12 +592,14 @@ GET /export/suppliers
 Exports supplier data in CSV or Excel format.
 
 **Query Parameters**:
+
 - `format` (optional): Export format, either `csv` (default) or `excel`
 
 **Response**:
 Returns a downloadable file in the requested format containing supplier data.
 
 ### Import Products
+
 ```
 POST /import/products
 ```
@@ -562,6 +611,7 @@ Multipart form data with a file field named `file` containing the CSV or Excel f
 
 **Expected File Format**:
 The file should contain the following columns:
+
 - ID (optional, if provided will update existing products)
 - Name (required)
 - Description
@@ -572,6 +622,7 @@ The file should contain the following columns:
 - Currency
 
 **Response**:
+
 ```json
 {
   "success": true,
@@ -585,6 +636,7 @@ The file should contain the following columns:
 ```
 
 ### Import Categories
+
 ```
 POST /import/categories
 ```
@@ -596,6 +648,7 @@ Multipart form data with a file field named `file` containing the CSV or Excel f
 
 **Expected File Format**:
 The file should contain the following columns:
+
 - ID (optional, if provided will update existing categories)
 - Name (required)
 - Description
@@ -606,6 +659,7 @@ The file should contain the following columns:
 - Image URL
 
 **Response**:
+
 ```json
 {
   "success": true,

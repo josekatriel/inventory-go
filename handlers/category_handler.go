@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // CategoryHandler handles category-related operations
@@ -20,7 +20,7 @@ type CategoryHandler struct {
 }
 
 // NewCategoryHandler creates a new CategoryHandler
-func NewCategoryHandler(db *pgx.Conn) *CategoryHandler {
+func NewCategoryHandler(db *pgxpool.Pool) *CategoryHandler {
 	return &CategoryHandler{
 		BaseHandler: &BaseHandler{DB: db},
 		repo:        repositories.NewCategoryRepository(db),

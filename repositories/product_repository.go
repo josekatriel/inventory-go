@@ -9,9 +9,12 @@ import (
 	"strconv"
 	"time"
 
+	"log"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Define Attribute type for product attributes
@@ -55,7 +58,7 @@ type ProductRepositoryImpl struct {
 	*BaseRepository
 }
 
-func NewProductRepository(db *pgx.Conn) ProductRepository {
+func NewProductRepository(db *pgxpool.Pool) ProductRepository {
 	return &ProductRepositoryImpl{
 		BaseRepository: NewBaseRepository(db),
 	}
@@ -65,7 +68,7 @@ func NewProductRepository(db *pgx.Conn) ProductRepository {
 func (r *ProductRepositoryImpl) GetAll() ([]*models.Product, error) {
 	query := `
 		SELECT 
-			p.id, p.parent_id, p.stock, p.child_category_id, 
+			p.id, p.parent_id, p.stock, p.category_id, 
 			p.created_at, p.updated_at, p.deleted_at,
 			p.basic->>'name' as name,
 			p.basic->>'description' as description,
@@ -77,31 +80,31 @@ func (r *ProductRepositoryImpl) GetAll() ([]*models.Product, error) {
 			p.price->>'currency' as currency
 		FROM products p 
 		WHERE p.deleted_at IS NULL`
-	
+
 	rows, err := r.db.Query(context.Background(), query)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	var products []*models.Product
 	for rows.Next() {
 		product := &models.Product{}
 		var priceStr string
 		var deletedAt pgtype.Timestamp
-		
+
 		err := rows.Scan(
-			&product.ID, &product.ParentID, &product.Stock, &product.ChildCategoryID,
+			&product.ID, &product.ParentID, &product.Stock, &product.CategoryID,
 			&product.CreatedAt, &product.UpdatedAt, &deletedAt,
 			&product.Basic.Name, &product.Basic.Description, &product.Basic.Status,
 			&product.Basic.Condition, &product.Basic.SKU, &product.Basic.IsVariant,
 			&priceStr, &product.Price.Currency,
 		)
-		
+
 		if err != nil {
 			return nil, fmt.Errorf("error scanning product: %w", err)
 		}
-		
+
 		// Convert string values to proper types
 		if priceStr != "" {
 			price, err := strconv.ParseFloat(priceStr, 64)
@@ -109,14 +112,14 @@ func (r *ProductRepositoryImpl) GetAll() ([]*models.Product, error) {
 				product.Price.Price = price
 			}
 		}
-		
+
 		if deletedAt.Valid {
 			product.DeletedAt = &deletedAt.Time
 		}
-		
+
 		products = append(products, product)
 	}
-	
+
 	return products, nil
 }
 
@@ -136,38 +139,33 @@ func (r *ProductRepositoryImpl) Create(product *models.Product) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal basic info: %w", err)
 	}
-	
+
 	priceJSON, err := json.Marshal(product.Price)
 	if err != nil {
 		return fmt.Errorf("failed to marshal price info: %w", err)
 	}
-	
+
 	weightJSON, err := json.Marshal(product.Weight)
 	if err != nil {
 		return fmt.Errorf("failed to marshal weight info: %w", err)
 	}
-	
-	imagesJSON, err := json.Marshal(product.Images)
-	if err != nil {
-		return fmt.Errorf("failed to marshal images: %w", err)
-	}
-	
+
 	inventoryJSON, err := json.Marshal(product.InventoryActivity)
 	if err != nil {
 		return fmt.Errorf("failed to marshal inventory activity: %w", err)
 	}
-	
+
 	query := `
 		INSERT INTO products (
-			id, parent_id, stock, child_category_id, created_at, updated_at,
-			basic, price, weight, images, inventory_activity
+			id, parent_id, stock, reorder_level, category_id, created_at, updated_at,
+			basic, price, weight, inventory_activity
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 
 	_, err = r.db.Exec(context.Background(), query,
-		product.ID, product.ParentID, product.Stock, product.ChildCategoryID,
+		product.ID, product.ParentID, product.Stock, product.ReorderLevel, product.CategoryID,
 		product.CreatedAt, product.UpdatedAt,
-		basicJSON, priceJSON, weightJSON, imagesJSON, inventoryJSON)
-	
+		basicJSON, priceJSON, weightJSON, inventoryJSON)
+
 	return err
 }
 
@@ -180,22 +178,17 @@ func (r *ProductRepositoryImpl) Update(product *models.Product) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal basic info: %w", err)
 	}
-	
+
 	priceJSON, err := json.Marshal(product.Price)
 	if err != nil {
 		return fmt.Errorf("failed to marshal price info: %w", err)
 	}
-	
+
 	weightJSON, err := json.Marshal(product.Weight)
 	if err != nil {
 		return fmt.Errorf("failed to marshal weight info: %w", err)
 	}
-	
-	imagesJSON, err := json.Marshal(product.Images)
-	if err != nil {
-		return fmt.Errorf("failed to marshal images: %w", err)
-	}
-	
+
 	inventoryJSON, err := json.Marshal(product.InventoryActivity)
 	if err != nil {
 		return fmt.Errorf("failed to marshal inventory activity: %w", err)
@@ -206,23 +199,23 @@ func (r *ProductRepositoryImpl) Update(product *models.Product) error {
 			updated_at = $1, 
 			parent_id = $2, 
 			stock = $3, 
-			child_category_id = $4, 
-			basic = $5, 
-			price = $6, 
-			weight = $7, 
-			images = $8, 
+			reorder_level = $4, 
+			category_id = $5, 
+			basic = $6, 
+			price = $7, 
+			weight = $8, 
 			inventory_activity = $9
 		WHERE id = $10`
 
 	result, err := r.db.Exec(context.Background(), query,
-		product.UpdatedAt, 
-		product.ParentID, 
-		product.Stock, 
-		product.ChildCategoryID,
-		basicJSON, 
-		priceJSON, 
-		weightJSON, 
-		imagesJSON, 
+		product.UpdatedAt,
+		product.ParentID,
+		product.Stock,
+		product.ReorderLevel,
+		product.CategoryID,
+		basicJSON,
+		priceJSON,
+		weightJSON,
 		inventoryJSON,
 		product.ID)
 
@@ -274,97 +267,147 @@ func (r *ProductRepositoryImpl) Delete(id string) error {
 
 // GetByID implements ProductRepository.
 func (r *ProductRepositoryImpl) GetByID(id string) (*models.Product, error) {
+	log.Printf("GetByID called with id: %s", id)
+
 	var product models.Product
 	var parentID *string
-	var attributesJSON []byte
+	var priceStr string
+	var deletedAt pgtype.Timestamp
 
+	// Query with exact field matching
 	query := `
 		SELECT 
-		    p.id, p.parent_id, p.stock, p.child_category_id, 
-		    p.created_at, p.updated_at, p.deleted_at,
-		    p.basic->>'name', p.basic->>'description', 
-		    (p.basic->>'status')::int, (p.basic->>'condition')::int,
-		    p.basic->>'sku', (p.basic->>'is_variant')::boolean,
-		    p.price->>'price', p.price->>'currency',
-		    (p.price->>'last_update_unix')::bigint as last_update_unix,
-		    p.weight->>'weight' as weight,
-		    (p.weight->>'unit')::int as unit,
-		    p.inventory_activity->>'sales_count' as sales_count,
-		    p.inventory_activity->>'stock_in' as stock_in,
-		    p.inventory_activity->>'reject' as reject,
-		    p.attributes
-		FROM products p 
-		WHERE p.id = $1 AND p.deleted_at IS NULL`
+		    id, parent_id, stock, reorder_level, category_id, 
+		    created_at, updated_at, deleted_at,
+		    basic->>'name', basic->>'description', 
+		    (basic->>'status')::int, (basic->>'condition')::int,
+		    basic->>'sku', (basic->>'is_variant')::boolean,
+		    price->>'price', price->>'currency',
+		    (price->>'last_update_unix')::bigint
+		FROM products 
+		WHERE id = $1 AND deleted_at IS NULL`
 
-	err := r.QueryRow(context.Background(), query, id).Scan(
-		&product.ID, &parentID, &product.Stock, &product.ChildCategoryID,
-		&product.CreatedAt, &product.UpdatedAt, &product.DeletedAt,
+	log.Printf("Executing query: %s with id: %s", query, id)
+
+	// Execute the query
+	row := r.db.QueryRow(context.Background(), query, id)
+
+	// Log the columns being selected
+	log.Printf("Scanning into variables...")
+	err := row.Scan(
+		&product.ID, &parentID, &product.Stock, &product.ReorderLevel, &product.CategoryID,
+		&product.CreatedAt, &product.UpdatedAt, &deletedAt,
 		&product.Basic.Name, &product.Basic.Description, &product.Basic.Status,
 		&product.Basic.Condition, &product.Basic.SKU, &product.Basic.IsVariant,
-		&product.Price.Price, &product.Price.Currency, &product.Price.LastUpdateUnix,
-		&product.Weight.Weight, &product.Weight.Unit,
-		&product.InventoryActivity.SalesCount, &product.InventoryActivity.StockIn,
-		&product.InventoryActivity.Reject, &attributesJSON,
+		&priceStr, &product.Price.Currency, &product.Price.LastUpdateUnix,
 	)
 
 	if err != nil {
+		log.Printf("Error in GetByID Scan: %v", err)
 		if errors.Is(err, pgx.ErrNoRows) {
+			log.Printf("Product not found with id: %s", id)
 			return nil, errors.New("product not found")
 		}
+		log.Printf("Database error getting product: %v", err)
 		return nil, fmt.Errorf("error getting product: %w", err)
 	}
 
-	// Skip attributes unmarshaling as it's not part of the Product struct
-	// We would handle them separately if needed through the AddAttribute method
-	_ = attributesJSON
+	log.Printf("Successfully scanned product: %+v", product)
+
+	// Handle deleted_at
+	if deletedAt.Valid {
+		product.DeletedAt = &deletedAt.Time
+	}
+
+	// Convert string price to float
+	if priceStr != "" {
+		price, err := strconv.ParseFloat(priceStr, 64)
+		if err != nil {
+			log.Printf("Error parsing price '%s': %v", priceStr, err)
+		} else {
+			product.Price.Price = price
+		}
+	}
+
+	product.ParentID = parentID
 
 	// Load variants if this is a parent product
 	if !product.Basic.IsVariant {
 		tx, err := r.db.Begin(context.Background())
 		if err != nil {
+			log.Printf("Error beginning transaction: %v", err)
 			return nil, fmt.Errorf("error beginning transaction: %w", err)
 		}
 		defer tx.Rollback(context.Background())
 
+		log.Printf("Loading variants for product: %s", product.ID)
 		if err := product.LoadVariants(tx); err != nil {
+			log.Printf("Error loading variants: %v", err)
 			return nil, fmt.Errorf("error loading variants: %w", err)
 		}
 
+		// Load images for this product
+		log.Printf("Loading images for product: %s", product.ID)
+		images, err := r.getProductImages(product.ID)
+		if err != nil {
+			log.Printf("Error loading images: %v", err)
+			return nil, fmt.Errorf("error loading images: %w", err)
+		}
+		product.Images = images
+
+		log.Printf("Committing transaction for product: %s", product.ID)
 		if err := tx.Commit(context.Background()); err != nil {
+			log.Printf("Error committing transaction: %v", err)
 			return nil, fmt.Errorf("error committing transaction: %w", err)
 		}
 	}
 
+	log.Printf("Successfully retrieved product: %s", product.ID)
 	return &product, nil
 }
 
 // List implements ProductRepository.
-func (r *ProductRepositoryImpl) List(offset int, limit int, status string) ([]*models.Product, int64, error) {
+func (r *ProductRepositoryImpl) List(offset, limit int, status string) ([]*models.Product, int64, error) {
 	var products []*models.Product
 	var total int64
 
-	// Build query
+	// First, get the total count
+	countQuery := `SELECT COUNT(*) FROM products WHERE deleted_at IS NULL`
+	if status != "" {
+		countQuery += " AND basic->>'status' = $1"
+		err := r.db.QueryRow(context.Background(), countQuery, status).Scan(&total)
+		if err != nil {
+			return nil, 0, fmt.Errorf("error getting total count: %w", err)
+		}
+	} else {
+		err := r.db.QueryRow(context.Background(), countQuery).Scan(&total)
+		if err != nil {
+			return nil, 0, fmt.Errorf("error getting total count: %w", err)
+		}
+	}
+
+	// Build query for paginated results
 	query := `
 		SELECT 
-			p.id, p.parent_id, p.stock, p.child_category_id,
+			p.id, p.parent_id, p.stock, p.reorder_level, p.category_id,
 			p.created_at, p.updated_at, p.deleted_at, 
 			p.basic->>'name', p.basic->>'description', 
 			(p.basic->>'status')::int, (p.basic->>'condition')::int,
 			p.basic->>'sku', (p.basic->>'is_variant')::boolean,
 			p.price->>'price', p.price->>'currency',
-			(SELECT COUNT(*) FROM products WHERE deleted_at IS NULL) as total
+			(p.price->>'last_update_unix')::bigint
 		FROM products p 
 		WHERE p.deleted_at IS NULL`
-	
+
 	// Add status filter if provided
 	args := []interface{}{}
 	if status != "" {
-		query += " AND p.basic->>'status' = $1"
+		query += " AND p.basic->>'status' = $" + strconv.Itoa(len(args)+1)
 		args = append(args, status)
 	}
-	
+
 	// Add pagination
-	query += " ORDER BY p.created_at DESC LIMIT $" + strconv.Itoa(len(args)+1) + 
+	query += " ORDER BY p.created_at DESC LIMIT $" + strconv.Itoa(len(args)+1) +
 		" OFFSET $" + strconv.Itoa(len(args)+2)
 	args = append(args, limit, offset)
 
@@ -373,18 +416,18 @@ func (r *ProductRepositoryImpl) List(offset int, limit int, status string) ([]*m
 		return nil, 0, err
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		product := &models.Product{}
 		var priceStr string
 		var deletedAt pgtype.Timestamp
-		
+
 		err := rows.Scan(
-			&product.ID, &product.ParentID, &product.Stock, &product.ChildCategoryID,
+			&product.ID, &product.ParentID, &product.Stock, &product.ReorderLevel, &product.CategoryID,
 			&product.CreatedAt, &product.UpdatedAt, &deletedAt,
 			&product.Basic.Name, &product.Basic.Description, &product.Basic.Status,
 			&product.Basic.Condition, &product.Basic.SKU, &product.Basic.IsVariant,
-			&priceStr, &product.Price.Currency,
+			&priceStr, &product.Price.Currency, &product.Price.LastUpdateUnix,
 		)
 		if err != nil {
 			return nil, 0, err
@@ -392,7 +435,7 @@ func (r *ProductRepositoryImpl) List(offset int, limit int, status string) ([]*m
 		if deletedAt.Valid {
 			product.DeletedAt = &deletedAt.Time
 		}
-		
+
 		// Convert string values to proper types
 		if priceStr != "" {
 			price, err := strconv.ParseFloat(priceStr, 64)
@@ -400,16 +443,11 @@ func (r *ProductRepositoryImpl) List(offset int, limit int, status string) ([]*m
 				product.Price.Price = price
 			}
 		}
-		
+
 		products = append(products, product)
 	}
-	
-	if err = rows.Err(); err != nil {
-		return nil, 0, err
-	}
 
-	err = r.db.QueryRow(context.Background(), "SELECT COUNT(*) FROM products WHERE deleted_at IS NULL").Scan(&total)
-	if err != nil {
+	if err = rows.Err(); err != nil {
 		return nil, 0, err
 	}
 
@@ -419,8 +457,8 @@ func (r *ProductRepositoryImpl) List(offset int, limit int, status string) ([]*m
 // Search implements ProductRepository.
 func (r *ProductRepositoryImpl) Search(searchQuery string, categoryID *string) ([]*models.Product, error) {
 	query := `
-		SELECT 
-			p.id, p.parent_id, p.stock, p.child_category_id,
+		SELECT
+			p.id, p.parent_id, p.stock, p.category_id,
 			p.created_at, p.updated_at, p.deleted_at, 
 			p.basic->>'name', p.basic->>'description', 
 			(p.basic->>'status')::int, (p.basic->>'condition')::int,
@@ -437,7 +475,7 @@ func (r *ProductRepositoryImpl) Search(searchQuery string, categoryID *string) (
 	}
 
 	if categoryID != nil && *categoryID != "" {
-		query += fmt.Sprintf(" AND p.child_category_id = $%d", len(args)+1)
+		query += fmt.Sprintf(" AND p.category_id = $%d", len(args)+1)
 		args = append(args, *categoryID)
 	}
 
@@ -448,15 +486,15 @@ func (r *ProductRepositoryImpl) Search(searchQuery string, categoryID *string) (
 		return nil, fmt.Errorf("error executing search query: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var products []*models.Product
 	for rows.Next() {
 		product := &models.Product{}
 		var priceStr string
 		var deletedAt pgtype.Timestamp
-		
+
 		err := rows.Scan(
-			&product.ID, &product.ParentID, &product.Stock, &product.ChildCategoryID,
+			&product.ID, &product.ParentID, &product.Stock, &product.CategoryID,
 			&product.CreatedAt, &product.UpdatedAt, &deletedAt,
 			&product.Basic.Name, &product.Basic.Description, &product.Basic.Status,
 			&product.Basic.Condition, &product.Basic.SKU, &product.Basic.IsVariant,
@@ -468,7 +506,7 @@ func (r *ProductRepositoryImpl) Search(searchQuery string, categoryID *string) (
 		if deletedAt.Valid {
 			product.DeletedAt = &deletedAt.Time
 		}
-		
+
 		// Convert string values to proper types
 		if priceStr != "" {
 			price, err := strconv.ParseFloat(priceStr, 64)
@@ -476,10 +514,10 @@ func (r *ProductRepositoryImpl) Search(searchQuery string, categoryID *string) (
 				product.Price.Price = price
 			}
 		}
-		
+
 		products = append(products, product)
 	}
-	
+
 	return products, nil
 }
 
@@ -555,8 +593,6 @@ func (r *ProductRepositoryImpl) SetPrimaryImage(productID string, imageID string
 	return nil
 }
 
-
-
 // AddAttribute implements ProductRepository.
 func (r *ProductRepositoryImpl) AddAttribute(productID string, attribute Attribute) error {
 	// Check if product exists
@@ -567,7 +603,7 @@ func (r *ProductRepositoryImpl) AddAttribute(productID string, attribute Attribu
 	if !exists {
 		return fmt.Errorf("product not found: %s", productID)
 	}
-	
+
 	// Create new attribute object
 	attributeMap := map[string]string{
 		attribute.Key: attribute.Value,
@@ -598,7 +634,7 @@ func (r *ProductRepositoryImpl) UpdateStock(id string, quantity int) error {
 
 	// Calculate new stock
 	newStock := product.Stock + quantity
-	
+
 	// Ensure stock doesn't go below 0
 	if newStock < 0 {
 		return fmt.Errorf("insufficient stock - current: %d, requested: %d", product.Stock, -quantity)
@@ -619,7 +655,7 @@ func (r *ProductRepositoryImpl) GetVariants(parentID string) ([]*models.Product,
 	var variants []*models.Product
 
 	query := `SELECT 
-		id, parent_id, stock, child_category_id,
+		id, parent_id, stock, category_id,
 		basic->>'name' as name, 
 		basic->>'description' as description, 
 		(basic->>'status')::int as status, 
@@ -629,7 +665,7 @@ func (r *ProductRepositoryImpl) GetVariants(parentID string) ([]*models.Product,
 		price->>'price' as price
 	  FROM products 
 	  WHERE parent_id = $1 AND deleted_at IS NULL`
-	
+
 	rows, err := r.db.Query(context.Background(), query, parentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query variants: %w", err)
@@ -639,9 +675,9 @@ func (r *ProductRepositoryImpl) GetVariants(parentID string) ([]*models.Product,
 	for rows.Next() {
 		product := &models.Product{}
 		var priceStr string
-		
+
 		err := rows.Scan(
-			&product.ID, &product.ParentID, &product.Stock, &product.ChildCategoryID,
+			&product.ID, &product.ParentID, &product.Stock, &product.CategoryID,
 			&product.Basic.Name, &product.Basic.Description, &product.Basic.Status,
 			&product.Basic.Condition, &product.Basic.SKU, &product.Basic.IsVariant,
 			&priceStr,
@@ -649,14 +685,14 @@ func (r *ProductRepositoryImpl) GetVariants(parentID string) ([]*models.Product,
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan variant: %w", err)
 		}
-		
+
 		if priceStr != "" {
 			price, err := strconv.ParseFloat(priceStr, 64)
 			if err == nil {
 				product.Price.Price = price
 			}
 		}
-		
+
 		variants = append(variants, product)
 	}
 
@@ -672,10 +708,10 @@ func (r *ProductRepositoryImpl) GetStockHistory(id string) ([]models.InventoryAc
 	if !exists {
 		return nil, errors.New("product not found")
 	}
-	
-	// Get activity from product 
+
+	// Get activity from product
 	query := `SELECT inventory_activity FROM products WHERE id = $1 AND deleted_at IS NULL`
-	
+
 	var activityJSON string
 	err = r.db.QueryRow(context.Background(), query, id).Scan(&activityJSON)
 	if err != nil {
@@ -684,37 +720,37 @@ func (r *ProductRepositoryImpl) GetStockHistory(id string) ([]models.InventoryAc
 		}
 		return nil, fmt.Errorf("error getting product inventory: %w", err)
 	}
-	
+
 	// Parse activity JSON
 	var activityStr struct {
 		SalesCount string `json:"sales_count"`
 		StockIn    string `json:"stock_in"`
 		Reject     string `json:"reject"`
 	}
-	
+
 	// If no activity yet, return empty data
 	if activityJSON == "" || activityJSON == "null" {
 		return []models.InventoryActivity{}, nil
 	}
-	
+
 	// Parse JSON
 	err = json.Unmarshal([]byte(activityJSON), &activityStr)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing inventory activity: %w", err)
 	}
-	
+
 	// Convert string values to integer
 	salesCount, _ := strconv.Atoi(activityStr.SalesCount)
 	stockIn, _ := strconv.Atoi(activityStr.StockIn)
 	reject, _ := strconv.Atoi(activityStr.Reject)
-	
+
 	// Create an inventory activity entry
 	activity := models.InventoryActivity{
 		SalesCount: salesCount,
 		StockIn:    stockIn,
 		Reject:     reject,
 	}
-	
+
 	// Return as a slice since the interface expects a slice
 	return []models.InventoryActivity{activity}, nil
 }
@@ -724,7 +760,7 @@ func (r *ProductRepositoryImpl) GetStockHistory(id string) ([]models.InventoryAc
 func (r *ProductRepositoryImpl) GetLowStockProducts() ([]*models.Product, error) {
 	query := `
 		SELECT 
-			p.id, p.parent_id, p.stock, p.reorder_level, p.child_category_id, 
+			p.id, p.parent_id, p.stock, p.reorder_level, p.category_id, 
 			p.created_at, p.updated_at, p.deleted_at,
 			p.basic->>'name' as name,
 			p.basic->>'description' as description,
@@ -739,31 +775,31 @@ func (r *ProductRepositoryImpl) GetLowStockProducts() ([]*models.Product, error)
 		  AND p.reorder_level > 0
 		  AND p.stock <= p.reorder_level
 		ORDER BY p.stock ASC`
-	
+
 	rows, err := r.db.Query(context.Background(), query)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	var products []*models.Product
 	for rows.Next() {
 		product := &models.Product{}
 		var priceStr string
 		var deletedAt pgtype.Timestamp
-		
+
 		err := rows.Scan(
-			&product.ID, &product.ParentID, &product.Stock, &product.ReorderLevel, &product.ChildCategoryID,
+			&product.ID, &product.ParentID, &product.Stock, &product.ReorderLevel, &product.CategoryID,
 			&product.CreatedAt, &product.UpdatedAt, &deletedAt,
 			&product.Basic.Name, &product.Basic.Description, &product.Basic.Status,
 			&product.Basic.Condition, &product.Basic.SKU, &product.Basic.IsVariant,
 			&priceStr, &product.Price.Currency,
 		)
-		
+
 		if err != nil {
 			return nil, fmt.Errorf("error scanning product: %w", err)
 		}
-		
+
 		// Convert string values to proper types
 		if priceStr != "" {
 			price, err := strconv.ParseFloat(priceStr, 64)
@@ -771,21 +807,21 @@ func (r *ProductRepositoryImpl) GetLowStockProducts() ([]*models.Product, error)
 				product.Price.Price = price
 			}
 		}
-		
+
 		if deletedAt.Valid {
 			product.DeletedAt = &deletedAt.Time
 		}
-		
+
 		products = append(products, product)
 	}
-	
+
 	return products, nil
 }
 
 func (r *ProductRepositoryImpl) GetBySKU(sku string) (*models.Product, error) {
 	query := `
 		SELECT 
-			p.id, p.parent_id, p.stock, p.child_category_id, 
+			p.id, p.parent_id, p.stock, p.category_id, 
 			p.created_at, p.updated_at, p.deleted_at,
 			p.basic->>'name' as name,
 			p.basic->>'description' as description,
@@ -804,9 +840,9 @@ func (r *ProductRepositoryImpl) GetBySKU(sku string) (*models.Product, error) {
 	var product models.Product
 	var priceStr, weightStr string
 	var lastUpdateUnix int64
-	
+
 	err := r.db.QueryRow(context.Background(), query, sku).Scan(
-		&product.ID, &product.ParentID, &product.Stock, &product.ChildCategoryID,
+		&product.ID, &product.ParentID, &product.Stock, &product.CategoryID,
 		&product.CreatedAt, &product.UpdatedAt, &product.DeletedAt,
 		&product.Basic.Name, &product.Basic.Description, &product.Basic.Status,
 		&product.Basic.Condition, &product.Basic.SKU, &product.Basic.IsVariant,
@@ -851,42 +887,72 @@ func (r *ProductRepositoryImpl) AddVariant(parentID string, variant *models.Prod
 	// Set variant fields
 	variant.ParentID = &parentID
 	variant.Basic.IsVariant = true
-	
+
 	// Create variant in database
 	now := time.Now()
 	variant.CreatedAt = now
 	variant.UpdatedAt = now
-	
+
 	query := `INSERT INTO products (
 		id, parent_id, stock, created_at, updated_at,
 		basic, price, weight
 	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
-	
+
 	basicJSON, err := json.Marshal(variant.Basic)
 	if err != nil {
 		return fmt.Errorf("failed to marshal basic info: %w", err)
 	}
-	
+
 	priceJSON, err := json.Marshal(variant.Price)
 	if err != nil {
 		return fmt.Errorf("failed to marshal price: %w", err)
 	}
-	
+
 	weightJSON, err := json.Marshal(variant.Weight)
 	if err != nil {
 		return fmt.Errorf("failed to marshal weight: %w", err)
 	}
-	
+
 	_, err = r.db.Exec(context.Background(), query,
 		variant.ID, parentID, variant.Stock, variant.CreatedAt, variant.UpdatedAt,
 		basicJSON, priceJSON, weightJSON,
 	)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to create product variant: %w", err)
 	}
-	
+
 	return nil
+}
+
+// getProductImages loads images for a product
+func (r *ProductRepositoryImpl) getProductImages(productID string) ([]*models.Images, error) {
+	query := `
+		SELECT id, product_id, url, is_primary, sort_order, created_at  
+		FROM images
+		WHERE product_id = $1
+		ORDER BY sort_order ASC, created_at ASC`
+
+	rows, err := r.db.Query(context.Background(), query, productID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var images []*models.Images
+	for rows.Next() {
+		img := &models.Images{}
+		err := rows.Scan(
+			&img.ID, &img.ProductID, &img.URL, &img.IsPrimary,
+			&img.SortOrder, &img.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		images = append(images, img)
+	}
+
+	return images, rows.Err()
 }
 
 func (r *ProductRepositoryImpl) AddImage(productID string, image *models.Images) error {
@@ -894,19 +960,19 @@ func (r *ProductRepositoryImpl) AddImage(productID string, image *models.Images)
 	if image.ID == "" {
 		image.ID = uuid.NewString()
 	}
-	
+
 	query := `INSERT INTO images (
 		id, product_id, url, is_primary, sort_order, created_at
 	) VALUES ($1, $2, $3, $4, $5, $6)`
-	
+
 	_, err := r.db.Exec(context.Background(), query,
 		image.ID, image.ProductID, image.URL, image.IsPrimary, image.SortOrder, time.Now(),
 	)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to add image: %w", err)
 	}
-	
+
 	return nil
 }
 

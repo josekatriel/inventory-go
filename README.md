@@ -5,24 +5,28 @@ A comprehensive inventory management API built with Go and Supabase PostgreSQL, 
 ## ✨ Features
 
 - **Product Management**
+
   - Product variants and attributes
   - Categories and subcategories
   - Barcode/SKU management
   - Stock level tracking
 
 - **Inventory Control**
+
   - Stock-in management
   - Stock rejections/write-offs
   - Low stock alerts
   - Inventory valuation
 
 - **Sales & Customers**
+
   - Sales order processing
   - Customer management
   - Sales reporting
   - Customer purchase history
 
 - **Supplier Management**
+
   - Supplier directory
   - Purchase order tracking
   - Supplier performance metrics
@@ -79,11 +83,13 @@ inventory-go/
 ### Environment Configuration
 
 1. Copy the example environment file:
+
    ```bash
    cp env.example .env
    ```
 
 2. Update `.env` with your Supabase credentials:
+
    ```env
    # Database Configuration
    DB_HOST=aws-0-us-east-2.pooler.supabase.com
@@ -91,10 +97,10 @@ inventory-go/
    DB_USER=postgres.YOUR_PROJECT_REF
    DB_PASSWORD=YOUR_PASSWORD
    DB_NAME=postgres
-   
+
    # Server Configuration
    PORT=8080
-   
+
    # Complete connection string (alternative to individual settings above)
    DATABASE_URL=postgresql://postgres.YOUR_PROJECT_REF:YOUR_PASSWORD@aws-0-us-east-2.pooler.supabase.com:6543/postgres
    ```
@@ -102,11 +108,13 @@ inventory-go/
 ### Running the Application
 
 1. Install dependencies:
+
    ```bash
    go mod download
    ```
 
 2. Start the server:
+
    ```bash
    go run main.go
    ```
@@ -274,3 +282,4 @@ If you encounter connection issues with Supabase:
 ## License
 
 MIT
+curl -X GET http://localhost:8080/api/categories

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type CustomerRepository interface {
@@ -26,10 +27,10 @@ type CustomerRepository interface {
 }
 
 type CustomerRepositoryImpl struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
-func NewCustomerRepository(db *pgx.Conn) CustomerRepository {
+func NewCustomerRepository(db *pgxpool.Pool) CustomerRepository {
 	return &CustomerRepositoryImpl{db: db}
 }
 

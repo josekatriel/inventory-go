@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // SaleHandler handles sale-related operations
@@ -22,7 +23,7 @@ type SaleHandler struct {
 }
 
 // NewSaleHandler creates a new SaleHandler
-func NewSaleHandler(db *pgx.Conn) *SaleHandler {
+func NewSaleHandler(db *pgxpool.Pool) *SaleHandler {
 	return &SaleHandler{
 		BaseHandler:  &BaseHandler{DB: db},
 		saleRepo:     repositories.NewSaleRepository(db),

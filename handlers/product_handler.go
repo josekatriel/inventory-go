@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ProductHandler handles product-related operations
@@ -21,28 +22,11 @@ type ProductHandler struct {
 }
 
 // NewProductHandler creates a new ProductHandler
-func NewProductHandler(db *pgx.Conn) *ProductHandler {
+func NewProductHandler(db *pgxpool.Pool) *ProductHandler {
 	return &ProductHandler{
 		BaseHandler: &BaseHandler{DB: db},
 		prodRepo:    repositories.NewProductRepository(db),
 	}
-}
-
-// parseIDFromRequest parses an ID from the URL parameters
-func (h *ProductHandler) parseIDFromRequest(r *http.Request, paramName string) (string, bool) {
-	vars := mux.Vars(r)
-	idStr := vars[paramName]
-	if idStr == "" {
-		return "", false
-	}
-
-	// Validate that it's a valid integer ID
-	_, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		return "", false
-	}
-
-	return idStr, true
 }
 
 func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
@@ -75,8 +59,10 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 
 // GetProduct retrieves a single product by ID
 func (h *ProductHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
-	id, ok := h.parseIDFromRequest(r, "id")
-	if !ok {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	if id == "" {
 		respondWithError(w, http.StatusBadRequest, "Invalid product ID")
 		return
 	}
@@ -209,9 +195,9 @@ func (h *ProductHandler) GetAllProducts(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, map[string]interface{}{
+	respondWithJSON(w, http.StatusOK, map[string]any{
 		"data": products,
-		"pagination": map[string]interface{}{
+		"pagination": map[string]any{
 			"total":  total,
 			"page":   page,
 			"limit":  limit,
@@ -239,8 +225,8 @@ func (h *ProductHandler) GetLowStockProducts(w http.ResponseWriter, r *http.Requ
 
 	// Add some helpful metadata to the response
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{
-		"data": products,
-		"total": len(products),
+		"data":    products,
+		"total":   len(products),
 		"message": "Products below their reorder threshold. These items need to be restocked.",
 	})
 }
