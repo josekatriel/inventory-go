@@ -1,5 +1,15 @@
 # Inventory Management API Documentation
 
+## Table of Contents
+
+1. [Authentication](#authentication)
+2. [Products](#products)
+3. [Categories](#categories)
+4. [Customers](#customers)
+5. [Sales](#sales)
+6. [Suppliers](#suppliers)
+7. [Export/Import](#exportimport)
+
 ## Base URL
 All API endpoints are prefixed with `/api`
 
@@ -101,17 +111,43 @@ POST /products
 **Request Body:**
 ```json
 {
-  "name": "Product Name",
-  "sku": "PROD-001",
-  "description": "Product description",
-  "category_id": "uuid-here",
-  "price": 99.99,
-  "cost_price": 49.99,
-  "quantity": 100,
+  "basic": {
+    "name": "Product Name",
+    "sku": "PROD-001",
+    "description": "Product description"
+  },
+  "price": {
+    "price": 99.99,
+    "currency": "USD"
+  },
+  "stock": 100,
   "reorder_level": 10,
-  "attributes": {
-    "color": "red",
-    "size": "M"
+  "child_category_id": "uuid-here"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Product created successfully",
+  "data": {
+    "id": "generated-uuid",
+    "basic": {
+      "name": "Product Name",
+      "sku": "PROD-001",
+      "description": "Product description"
+    },
+    "price": {
+      "price": 99.99,
+      "currency": "USD",
+      "last_update_unix": 1621500000
+    },
+    "stock": 100,
+    "reorder_level": 10,
+    "child_category_id": "uuid-here",
+    "created_at": "2023-01-01T00:00:00Z",
+    "updated_at": "2023-01-01T00:00:00Z"
   }
 }
 ```
@@ -139,7 +175,29 @@ POST /categories
   "name": "Electronics",
   "description": "Electronic devices",
   "parent_id": "uuid-or-null",
+  "sort_order": 1,
+  "status": 1,
   "image_url": "https://example.com/image.jpg"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Category created successfully",
+  "data": {
+    "id": "generated-uuid",
+    "name": "Electronics",
+    "description": "Electronic devices",
+    "slug": "electronics",
+    "status": 1,
+    "sort_order": 1,
+    "parent_id": "uuid-or-null",
+    "image_url": "https://example.com/image.jpg",
+    "created_at": "2023-01-01T00:00:00Z",
+    "updated_at": "2023-01-01T00:00:00Z"
+  }
 }
 ```
 
@@ -161,14 +219,44 @@ POST /customers
   "name": "John Doe",
   "email": "john@example.com",
   "phone": "+1234567890",
-  "address": "123 Main St",
-  "city": "New York",
-  "country": "USA",
-  "postal_code": "10001"
+  "address": "123 Main St, City, Country",
+  "notes": "VIP customer"
 }
 ```
 
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Customer created successfully",
+  "data": {
+    "id": "generated-uuid",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "phone": "+1234567890",
+    "address": "123 Main St, City, Country",
+    "total_orders": 0,
+    "total_spent": 0,
+    "notes": "VIP customer",
+    "created_at": "2023-01-01T00:00:00Z",
+    "updated_at": "2023-01-01T00:00:00Z"
+  }
+}
+```
+
+
+
 ### Sales
+
+#### Get All Sales
+```
+GET /sales
+```
+
+#### Get Sale by ID
+```
+GET /sales/{id}
+```
 
 #### Create Sale
 ```
@@ -178,21 +266,176 @@ POST /sales
 **Request Body:**
 ```json
 {
-  "customer_id": "uuid-here",
-  "reference_no": "SALE-001",
-  "status": "completed",
-  "discount": 0,
-  "tax": 10.5,
-  "shipping": 5.0,
-  "total": 115.5,
+  "status": "draft",
+  "sale_date": "2023-01-01T10:00:00Z",
+  "note": "Customer order",
+  "customer_id": "customer-uuid",
+  "platform": "Website",
   "items": [
     {
-      "product_id": "uuid-here",
+      "product_id": "product-uuid",
+      "product_name": "Product Name",
       "quantity": 2,
-      "unit_price": 50.0,
-      "total": 100.0
+      "unit_price": 49.99,
+      "tax": 5.00,
+      "discount": 0,
+      "subtotal": 104.98
+    }
+  ],
+  "payments": [
+    {
+      "amount": 104.98,
+      "payment_method": "credit_card",
+      "reference": "TRANS123456",
+      "note": "Full payment",
+      "payment_date": "2023-01-01T10:05:00Z"
     }
   ]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Sale created successfully",
+  "data": {
+    "id": "generated-uuid",
+    "reference_no": "SALE-20230101-abc123",
+    "status": "draft",
+    "sale_date": "2023-01-01T10:00:00Z",
+    "note": "Customer order",
+    "total": 104.98,
+    "paid": 104.98,
+    "balance": 0,
+    "customer_id": "customer-uuid",
+    "customer": {
+      "id": "customer-uuid",
+      "name": "John Doe"
+    },
+    "platform": "Website",
+    "items": [
+      {
+        "id": "item-uuid",
+        "sale_id": "generated-uuid",
+        "product_id": "product-uuid",
+        "product_name": "Product Name",
+        "quantity": 2,
+        "unit_price": 49.99,
+        "tax": 5.00,
+        "discount": 0,
+        "subtotal": 104.98,
+        "created_at": "2023-01-01T10:00:00Z",
+        "updated_at": "2023-01-01T10:00:00Z"
+      }
+    ],
+    "payments": [
+      {
+        "id": "payment-uuid",
+        "sale_id": "generated-uuid",
+        "amount": 104.98,
+        "payment_method": "credit_card",
+        "reference": "TRANS123456",
+        "note": "Full payment",
+        "payment_date": "2023-01-01T10:05:00Z",
+        "created_at": "2023-01-01T10:00:00Z",
+        "updated_at": "2023-01-01T10:00:00Z"
+      }
+    ],
+    "created_at": "2023-01-01T10:00:00Z",
+    "updated_at": "2023-01-01T10:00:00Z"
+  }
+}
+```
+
+#### Update Sale Status
+```
+PATCH /sales/{id}/status
+```
+
+**Request Body:**
+```json
+{
+  "status": "completed"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Sale status updated successfully",
+  "data": {
+    "id": "sale-uuid",
+    "status": "completed"
+  }
+}
+```
+
+#### Add Payment to Sale
+```
+POST /sales/{id}/payments
+```
+
+**Request Body:**
+```json
+{
+  "amount": 50.00,
+  "payment_method": "cash",
+  "reference": "CASH12345",
+  "note": "Partial payment",
+  "payment_date": "2023-01-01T12:00:00Z"
+}
+```
+```
+
+### Suppliers
+
+#### Get All Suppliers
+```
+GET /suppliers
+```
+
+#### Get Supplier by ID
+```
+GET /suppliers/{id}
+```
+
+#### Create Supplier
+```
+POST /suppliers
+```
+
+**Request Body:**
+```json
+{
+  "name": "ABC Supplies Inc.",
+  "email": "contact@abcsupplies.com",
+  "phone": "+1234567890",
+  "address": "456 Business Ave, Industry Zone",
+  "contact_person": "Jane Smith",
+  "notes": "Preferred supplier for electronics"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Supplier created successfully",
+  "data": {
+    "id": "generated-uuid",
+    "name": "ABC Supplies Inc.",
+    "email": "contact@abcsupplies.com",
+    "phone": "+1234567890",
+    "address": "456 Business Ave, Industry Zone",
+    "contact_person": "Jane Smith",
+    "total_purchases": 0,
+    "total_spent": 0,
+    "notes": "Preferred supplier for electronics",
+    "created_at": "2023-01-01T00:00:00Z",
+    "updated_at": "2023-01-01T00:00:00Z"
+  }
 }
 ```
 
@@ -252,3 +495,122 @@ POST /rejects
 
 ## Versioning
 API versioning will be implemented in a future update.
+
+## Export/Import
+
+### Export Products
+```
+GET /export/products
+```
+
+Exports product data in CSV or Excel format.
+
+**Query Parameters**:
+- `format` (optional): Export format, either `csv` (default) or `excel`
+
+**Response**:
+Returns a downloadable file in the requested format containing product data.
+
+### Export Categories
+```
+GET /export/categories
+```
+
+Exports category data in CSV or Excel format.
+
+**Query Parameters**:
+- `format` (optional): Export format, either `csv` (default) or `excel`
+
+**Response**:
+Returns a downloadable file in the requested format containing category data.
+
+### Export Customers
+```
+GET /export/customers
+```
+
+Exports customer data in CSV or Excel format.
+
+**Query Parameters**:
+- `format` (optional): Export format, either `csv` (default) or `excel`
+
+**Response**:
+Returns a downloadable file in the requested format containing customer data.
+
+### Export Suppliers
+```
+GET /export/suppliers
+```
+
+Exports supplier data in CSV or Excel format.
+
+**Query Parameters**:
+- `format` (optional): Export format, either `csv` (default) or `excel`
+
+**Response**:
+Returns a downloadable file in the requested format containing supplier data.
+
+### Import Products
+```
+POST /import/products
+```
+
+Imports products from a CSV or Excel file.
+
+**Request**:
+Multipart form data with a file field named `file` containing the CSV or Excel file.
+
+**Expected File Format**:
+The file should contain the following columns:
+- ID (optional, if provided will update existing products)
+- Name (required)
+- Description
+- SKU
+- Stock
+- Reorder Level
+- Price
+- Currency
+
+**Response**:
+```json
+{
+  "success": true,
+  "total": 10,
+  "imported": 8,
+  "errors": [
+    "Row 3: Product with ID abc123 not found",
+    "Row 5: Failed to save product: invalid price format"
+  ]
+}
+```
+
+### Import Categories
+```
+POST /import/categories
+```
+
+Imports categories from a CSV or Excel file.
+
+**Request**:
+Multipart form data with a file field named `file` containing the CSV or Excel file.
+
+**Expected File Format**:
+The file should contain the following columns:
+- ID (optional, if provided will update existing categories)
+- Name (required)
+- Description
+- Parent ID
+- Slug (optional, will be auto-generated if not provided)
+- Status
+- Sort Order
+- Image URL
+
+**Response**:
+```json
+{
+  "success": true,
+  "total": 5,
+  "imported": 5,
+  "errors": []
+}
+```

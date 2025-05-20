@@ -16,6 +16,7 @@ func SetupRoutes(r *mux.Router, db *pgx.Conn) {
 	supplierHandler := handlers.NewSupplierHandler(db)
 	stockInHandler := handlers.NewStockInHandler(db)
 	rejectHandler := handlers.NewRejectHandler(db)
+	exportImportHandler := handlers.NewExportImportHandler(db)
 
 	// Product routes
 	r.HandleFunc("/api/products/low-stock", productHandler.GetLowStockProducts).Methods("GET") // Specific route first
@@ -34,6 +35,14 @@ func SetupRoutes(r *mux.Router, db *pgx.Conn) {
 	r.HandleFunc("/api/categories/{id}/breadcrumbs", categoryHandler.GetBreadcrumbs).Methods("GET")
 	r.HandleFunc("/api/categories/{id}", categoryHandler.UpdateCategory).Methods("PUT")
 	r.HandleFunc("/api/categories/{id}", categoryHandler.DeleteCategory).Methods("DELETE")
+
+	// Export/Import routes
+	r.HandleFunc("/api/export/products", exportImportHandler.ExportProducts).Methods("GET")
+	r.HandleFunc("/api/export/categories", exportImportHandler.ExportCategories).Methods("GET")
+	r.HandleFunc("/api/export/customers", exportImportHandler.ExportCustomers).Methods("GET")
+	r.HandleFunc("/api/export/suppliers", exportImportHandler.ExportSuppliers).Methods("GET")
+	r.HandleFunc("/api/import/products", exportImportHandler.ImportProducts).Methods("POST")
+	r.HandleFunc("/api/import/categories", exportImportHandler.ImportCategories).Methods("POST")
 
 	// Customer routes
 	r.HandleFunc("/api/customers", customerHandler.GetAllCustomers).Methods("GET")

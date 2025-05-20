@@ -70,7 +70,7 @@
 - ⬜ **E-commerce Integration**: Connect with online stores
 - ⬜ **Accounting System Integration**: Sync with accounting software
 - ⬜ **Mobile App**: Companion mobile application for on-the-go management
-- ⬜ **Export/Import**: Data import/export in common formats (CSV, Excel)
+- ✅ **Export/Import**: Data import/export in common formats (CSV, Excel)
 
 ### System Improvements
 - ⬜ **Caching Layer**: Improve performance with Redis or other caching solutions
